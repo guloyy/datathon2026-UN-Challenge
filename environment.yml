@@ -32,3 +32,6 @@ dependencies:
       - streamlit-folium==0.27.1
       - python-dotenv==1.2.2
       - kaleido==0.2.1
+      - openai==1.86.0
+      - databricks-sdk==0.102.0
+      - databricks-sql-connector==3.7.0
