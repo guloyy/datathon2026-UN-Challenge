@@ -21,8 +21,8 @@ function gapColor(score: number): string {
 
 export default function App() {
   const [query, setQuery] = useState('')
-  const [yearFrom, setYearFrom] = useState(2024)
-  const [yearTo, setYearTo] = useState(2026)
+  const [yearFrom, setYearFrom] = useState(2019)
+  const [yearTo, setYearTo] = useState(2025)
   const [showSql, setShowSql] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -86,13 +86,13 @@ export default function App() {
             <label className="text-sm text-gray-400 flex items-center gap-2">
               Year from
               <select className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-gray-100 text-sm" value={yearFrom} onChange={e => setYearFrom(Number(e.target.value))}>
-                {[2024, 2025, 2026].map(y => <option key={y}>{y}</option>)}
+                {[2019,2020,2021,2022,2023,2024,2025].map(y => <option key={y}>{y}</option>)}
               </select>
             </label>
             <label className="text-sm text-gray-400 flex items-center gap-2">
               to
               <select className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-gray-100 text-sm" value={yearTo} onChange={e => setYearTo(Number(e.target.value))}>
-                {[2024, 2025, 2026].map(y => <option key={y}>{y}</option>)}
+                {[2019,2020,2021,2022,2023,2024,2025].map(y => <option key={y}>{y}</option>)}
               </select>
             </label>
             <label className="text-sm text-gray-400 flex items-center gap-2 ml-auto">

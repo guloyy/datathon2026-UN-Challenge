@@ -317,7 +317,7 @@ def _load_fts_cluster() -> pd.DataFrame:
     df["sector"] = df["sector_raw"].apply(_norm_cluster)
 
     # Filter to analysis window and valid rows
-    df = df[df["year"].between(2018, 2026)].copy()
+    df = df[df["year"].between(2019, 2025)].copy()
 
     agg = (
         df.groupby(["country_iso3", "year", "sector"], dropna=False)
@@ -401,7 +401,7 @@ def _load_cerf() -> pd.DataFrame:
     df["sector"] = df["sector_raw"].apply(_norm_cluster)
     df["year"] = pd.to_numeric(df["year"], errors="coerce")
 
-    df = df[df["year"].between(2018, 2026)].copy()
+    df = df[df["year"].between(2019, 2025)].copy()
 
     agg = (
         df.groupby(["country_iso3", "year", "sector"], dropna=False)
@@ -574,7 +574,7 @@ def _load_population() -> pd.DataFrame:
     df = df[[iso_col, pop_col]].rename(columns={iso_col: "country_iso3", pop_col: "population"})
     df["population"] = pd.to_numeric(df["population"], errors="coerce")
 
-    # Keep most recent estimate per country (sum across groups if multiple rows)
+    # Keep most recent estimate per country
     pop = df.groupby("country_iso3")["population"].max().reset_index()
     return pop
 
@@ -623,7 +623,7 @@ def _infer_emergency_group(name: str | None) -> str | None:
     if any(w in low for w in ["humanitarian needs and response plan", "humanitarian response plan",
                                "flash appeal", "humanitarian response priorities"]):
         return "Conflict-related"
-    return "Others"
+    return "Other"
 
 
 def _infer_emergency_type(name: str | None) -> str | None:
@@ -698,8 +698,52 @@ def build(save: bool = True) -> pd.DataFrame:
     master = pd.merge(master, pop, on="country_iso3", how="left")
 
     # ── Derived columns ───────────────────────────────────────────────────────
+    # Treat requirements_usd=0 as missing — a $0 plan is not a real funding ask.
+    master["requirements_usd"] = master["requirements_usd"].replace(0, np.nan)
+
+    # ── Synthesise sector='ALL' for every country×year ───────────────────────
+    # Aggregate sector-level FTS and HNO values so every country×year has a
+    # complete 'ALL' row regardless of whether HNO or FTS reported one directly.
+    agg_cols = {
+        "requirements_usd": "sum", "fts_funding_usd": "sum",
+        "cbpf_usd": "sum", "cerf_usd": "sum",
+        "cbpf_targeted": "sum", "cbpf_reached": "sum",
+        "pin": "max", "targeted": "max",
+    }
+    available_agg = {k: v for k, v in agg_cols.items() if k in master.columns}
+    sector_agg = (
+        master[master["sector"] != "ALL"]
+        .groupby(["country_iso3", "year"], dropna=False)
+        .agg({c: ("sum" if c not in ("pin","targeted") else "max") for c in available_agg})
+        .reset_index()
+    )
+    # Flatten MultiIndex columns if needed
+    if isinstance(sector_agg.columns, pd.MultiIndex):
+        sector_agg.columns = ["_".join(filter(None, c)) if isinstance(c, tuple) else c for c in sector_agg.columns]
+    sector_agg["sector"] = "ALL"
+
+    # Identify country×years that already have an 'ALL' row
+    existing_all = master[master["sector"] == "ALL"][["country_iso3", "year"]].drop_duplicates()
+    existing_keys = set(zip(existing_all["country_iso3"], existing_all["year"]))
+
+    # For existing 'ALL' rows: fill in null FTS columns from aggregated values
+    fts_patch = sector_agg.rename(columns={c: f"_{c}" for c in available_agg if c in sector_agg.columns})
+    master = master.merge(fts_patch, on=["country_iso3", "year", "sector"], how="left")
+    for col in available_agg:
+        pcol = f"_{col}"
+        if pcol in master.columns:
+            all_mask = master["sector"] == "ALL"
+            master.loc[all_mask & master[col].isna(), col] = master.loc[all_mask & master[col].isna(), pcol]
+            master.drop(columns=[pcol], inplace=True)
+
+    # For country×years with NO 'ALL' row: append a synthetic one
+    new_all = sector_agg[~sector_agg.apply(
+        lambda r: (r["country_iso3"], r["year"]) in existing_keys, axis=1
+    )].copy()
+    master = pd.concat([master, new_all], ignore_index=True)
+
     master["coverage_ratio"] = (
-        master["fts_funding_usd"] / master["requirements_usd"].replace(0, np.nan)
+        master["fts_funding_usd"] / master["requirements_usd"]
     ).clip(0, 1)
 
     # ── Crisis classification ─────────────────────────────────────────────────
@@ -744,10 +788,26 @@ def build(save: bool = True) -> pd.DataFrame:
         lambda k: emergency_types.get(k, (None, None))[1]
     )
 
+    # Normalize raw CERF emergency group values to our 3 canonical categories
+    _GROUP_NORM = {
+        "Others":              "Other",
+        "Multiple Emergencies":"Other",
+        "Disease Outbreak":    "Natural Disaster",
+        "Natural disaster":    "Natural Disaster",
+        "Conflict":            "Conflict-related",
+    }
+    master["emergency_group"] = master["emergency_group"].replace(_GROUP_NORM)
+
     # Fill missing emergency_group/type by inferring from crisis_name keywords
-    no_group = master["emergency_group"].isna()
+    no_group = master["emergency_group"].isna() | ~master["emergency_group"].isin(
+        {"Conflict-related", "Natural Disaster", "Other"}
+    )
     master.loc[no_group, "emergency_group"] = master.loc[no_group, "crisis_name"].apply(_infer_emergency_group)
     master.loc[no_group, "emergency_type"] = master.loc[no_group, "crisis_name"].apply(_infer_emergency_type)
+
+    # Final fallback — any remaining nulls after inference get "Other"
+    master["emergency_group"] = master["emergency_group"].fillna("Other")
+    master["emergency_type"] = master["emergency_type"].fillna("Unspecified")
 
     # Sector display name
     code_to_name = {
@@ -764,7 +824,7 @@ def build(save: bool = True) -> pd.DataFrame:
     # Drop non-crisis rows — these are FTS entries with no humanitarian signal
     before = len(master)
     master = master[master["is_crisis"]].copy()
-    master = master[master["year"].between(2018, 2026)].copy()
+    master = master[master["year"].between(2019, 2025)].copy()
     print(f"  Dropped {before - len(master):,} non-crisis rows → {len(master):,} rows remaining")
 
     # Drop columns that are still >85% null after crisis filter

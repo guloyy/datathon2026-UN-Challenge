@@ -36,8 +36,8 @@ app.add_middleware(
 
 class QueryRequest(BaseModel):
     query: str
-    year_from: int = 2024
-    year_to: int = 2026
+    year_from: int = 2019
+    year_to: int = 2025
     limit: int = 50
 
 
@@ -62,23 +62,15 @@ def run_query(req: QueryRequest):
     Convert a natural-language query to SQL using Databricks Foundation Model APIs,
     execute it against the Databricks warehouse, and return results.
     """
-    from src.query.sql_generator import generate_sql
-    from src.query.databricks_client import run_sql
+    from src.query.databricks_client import query
 
     try:
-        sql = generate_sql(
-            req.query,
-            year_filter=(req.year_from, req.year_to),
-        )
+        sql, df = query(req.query, year_filter=(req.year_from, req.year_to))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"SQL generation failed: {e}")
+        raise HTTPException(status_code=502, detail=f"Query failed: {e}")
 
-    try:
-        df = run_sql(sql)
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Databricks query failed: {e}")
-
-    # Convert NaN to None so JSON serialises cleanly
     df = df.where(pd.notna(df), None)
 
     return QueryResponse(
