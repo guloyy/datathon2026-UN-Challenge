@@ -10,6 +10,8 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.egg
+*.csv
+*.xlsx
 *.egg-info/
 .venv/
 venv/
