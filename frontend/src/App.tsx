@@ -215,21 +215,36 @@ interface ScoreResponse {
   }
 }
 
+// ── Info tooltip ──────────────────────────────────────────────────────────────
+
+function InfoTip({ text }: { text: string }) {
+  return (
+    <span className="relative group inline-flex items-center ml-1 cursor-help">
+      <span className="w-3.5 h-3.5 rounded-full border border-[color:var(--color-border-strong)] text-[color:var(--color-fg-muted)] text-[9px] font-bold flex items-center justify-center leading-none select-none">?</span>
+      <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[10px] px-3 py-2 text-xs text-[color:var(--color-fg-muted)] leading-relaxed shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-50 whitespace-normal font-sans font-normal normal-case tracking-normal">
+        {text}
+      </span>
+    </span>
+  )
+}
+
 // ── Color helpers ─────────────────────────────────────────────────────────────
 
 function lerp(a: number, b: number, t: number) { return a + (b - a) * Math.max(0, Math.min(1, t)) }
 
-function scoreToColor(score: number, robust = false): string {
+function scoreToColor(score: number, robust = false, maxScore = 1): string {
   if (robust) return '#7c3aed'
-  // 0 → steel blue, 0.4 → amber, 0.7 → orange, 1 → deep red
-  if (score < 0.4) {
-    const t = score / 0.4
+  // Normalise against the actual data max so the top scorer is always deep red
+  const n = maxScore > 0 ? Math.min(score / maxScore, 1) : 0
+  // 0 → steel blue, 0.35 → amber, 0.65 → orange, 1 → deep red
+  if (n < 0.35) {
+    const t = n / 0.35
     return `rgb(${Math.round(lerp(56,251,t))},${Math.round(lerp(132,146,t))},${Math.round(lerp(200,22,t))})`
-  } else if (score < 0.7) {
-    const t = (score - 0.4) / 0.3
+  } else if (n < 0.65) {
+    const t = (n - 0.35) / 0.30
     return `rgb(${Math.round(lerp(251,239,t))},${Math.round(lerp(146,68,t))},${Math.round(lerp(22,11,t))})`
   } else {
-    const t = (score - 0.7) / 0.3
+    const t = (n - 0.65) / 0.35
     return `rgb(${Math.round(lerp(239,153,t))},${Math.round(lerp(68,27,t))},${Math.round(lerp(11,27,t))})`
   }
 }
@@ -249,10 +264,10 @@ function ScoreBar({ row, maxScore }: { row: ScoreRow; maxScore: number }) {
   return (
     <div className="flex items-center gap-1.5">
       <div className="flex h-2 w-28 rounded overflow-hidden bg-[color:var(--color-surface-muted)]">
-        <div style={{ width: `${gapW}%`, background: scoreToColor(row.overlooked_score) }} />
+        <div style={{ width: `${gapW}%`, background: scoreToColor(row.overlooked_score, false, maxScore) }} />
         <div style={{ width: `${Math.max(0, bonusW)}%` }} className="bg-[color:var(--color-fg-muted)] opacity-40" />
       </div>
-      <span className="text-xs font-mono" style={{ color: scoreToColor(row.overlooked_score) }}>
+      <span className="text-xs font-mono" style={{ color: scoreToColor(row.overlooked_score, false, maxScore) }}>
         {row.overlooked_score.toFixed(3)}
       </span>
     </div>
@@ -263,12 +278,12 @@ function ScoreBar({ row, maxScore }: { row: ScoreRow; maxScore: number }) {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function PcaDot(props: any) {
-  const { cx, cy, payload } = props
+  const { cx, cy, payload, maxScore } = props
   if (!cx || !cy) return null
   return (
     <g>
       <circle cx={cx} cy={cy} r={payload.robust ? 7 : 4.5}
-        fill={scoreToColor(payload.overlooked_score, payload.robust)}
+        fill={scoreToColor(payload.overlooked_score, payload.robust, maxScore)}
         fillOpacity={0.85}
         stroke={payload.robust ? '#a78bfa' : 'none'} strokeWidth={1.5} />
       {payload.rank <= 10 && (
@@ -280,11 +295,11 @@ function PcaDot(props: any) {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function BubbleDot(props: any) {
-  const { cx, cy, payload } = props
+  const { cx, cy, payload, maxScore } = props
   // ZAxis passes area in px²; derive radius from it
   const area  = props.size ?? props.r ?? 200
   const r     = Math.sqrt(area / Math.PI)
-  const color = scoreToColor(payload.overlooked_score, payload.robust)
+  const color = scoreToColor(payload.overlooked_score, payload.robust, maxScore)
   if (!cx || !cy) return null
   return (
     <g>
@@ -308,7 +323,7 @@ function BubbleTooltip({ active, payload }: { active?: boolean; payload?: { payl
     <div className="bg-white rounded-[10px] p-3 text-xs shadow-[0_4px_12px_rgba(24,24,27,0.06),_0_1px_2px_rgba(24,24,27,0.04)] max-w-xs" style={{ boxShadow: '0 2px 8px rgba(24, 24, 27, 0.08)' }}>
       <div className="font-semibold text-[color:var(--color-fg)] flex items-center gap-2 mb-1.5">
         {r.country_name}
-        {r.robust && <span className="bg-[color:var(--color-accent-bg)] text-[color:var(--color-accent-hover)] px-1.5 py-0.5 rounded-[6px] text-[10px] font-medium uppercase tracking-wider">Robust</span>}
+        {r.robust && <span className="bg-[color:var(--color-accent-bg)] text-[color:var(--color-accent-hover)] px-1.5 py-0.5 rounded-[6px] text-[10px] font-medium uppercase tracking-wider">Consistently Overlooked</span>}
       </div>
       <div className="text-[color:var(--color-fg-muted)] space-y-0.5 font-mono tabular-nums">
         <div>Score: <span className="text-[color:var(--color-fg)]">{r.overlooked_score.toFixed(3)}</span>
@@ -374,7 +389,7 @@ const COLUMN_LABELS: Record<string, string> = {
   coverage_slope:      'Coverage Trend',
   years_underfunded:   'Years Underfunded',
   n_coverage_years:    '# Coverage Years',
-  robust:              'Robust',
+  robust:              'Consistently Overlooked',
   data_complete:       'Data Complete',
   explanation:         'Explanation',
 }
@@ -826,14 +841,17 @@ export default function App() {
                 <div className="grid grid-cols-4 gap-6">
                   {[
                     { label: 'Countries assessed', value: sResult.row_count },
-                    { label: 'Robustly overlooked', value: sResult.meta.robust_count,
-                      sub: 'top quartile in all 4 rankings' },
-                    { label: '#1 most overlooked', value: rows[0]?.country_name ?? '—', small: true },
+                    { label: 'Consistently overlooked', value: sResult.meta.robust_count,
+                      sub: 'top quartile in all 4 rankings',
+                      tip: 'Countries ranked in the top quartile across all four independent methods: funding coverage ratio (R1), gap × need product (R2), structural underfunding (R3), and targeting gap (R4). A crisis flagged here is persistently overlooked regardless of the analytical lens applied.' },
+                    { label: '#1 most overlooked', value: rows[0]?.country_name ?? '—', small: true,
+                      tip: 'Country with the highest composite overlooked score: a weighted mean of four normalised dimensions (need scale, funding gap, structural neglect, trend trajectory), discounted by a data-confidence factor of 1.00, 0.85, or 0.70 depending on source quality.' },
                     { label: 'PC1+PC2 variance',
-                      value: (Object.values(sResult.meta.pca_explained_var).slice(0,2).reduce((a,b)=>a+b,0)*100).toFixed(0)+'%' },
-                  ].map((c, idx) => (
+                      value: (Object.values(sResult.meta.pca_explained_var).slice(0,2).reduce((a,b)=>a+b,0)*100).toFixed(0)+'%',
+                      tip: 'Proportion of total variance captured by the first two principal components in the crisis-similarity map. A higher value indicates the two-dimensional projection faithfully represents the full five-dimensional feature space.' },
+                  ].map((c: { label: string; value: string | number; sub?: string; small?: boolean; tip?: string }, idx) => (
                     <div key={c.label} className={`flex flex-col gap-2 ${idx > 0 ? 'border-l border-[color:var(--color-border)] pl-6' : ''}`}>
-                      <div className="text-[11px] font-medium uppercase tracking-[0.06em] text-[color:var(--color-fg-muted)]">{c.label}</div>
+                      <div className="text-[11px] font-medium uppercase tracking-[0.06em] text-[color:var(--color-fg-muted)] flex items-center">{c.label}{c.tip && <InfoTip text={c.tip} />}</div>
                       <div className={`${c.small ? 'font-serif text-[22px]' : 'font-serif text-[34px]'} font-normal tabular-nums text-[color:var(--color-fg)] leading-[1.1]`}>{c.value}</div>
                       {c.sub && <div className="text-xs text-[color:var(--color-fg-subtle)]">{c.sub}</div>}
                     </div>
@@ -869,15 +887,21 @@ export default function App() {
                       <ReferenceLine x={30} stroke="#a1a1aa" strokeDasharray="4 4"
                         label={{ value: '30% threshold', fill: '#52525b', fontSize: 11, fontFamily: 'JetBrains Mono, monospace', position: 'insideTopRight' }} />
                       <ReTooltip content={<BubbleTooltip />} cursor={{ strokeDasharray: '3 3', stroke: '#a1a1aa' }} />
-                      <Scatter data={bubbleData} shape={<BubbleDot />} />
+                      <Scatter data={bubbleData} shape={<BubbleDot maxScore={maxScore} />} />
                     </ScatterChart>
                   </ResponsiveContainer>
                   {/* Legend */}
                   <div className="flex items-center gap-6 mt-4 text-xs text-[color:var(--color-fg-muted)] justify-center">
-                    {[['#3884c8','low gap'],['#f97316','medium gap'],['#dc2626','high gap'],['#7c3aed','robustly overlooked']].map(([c,l])=>(
-                      <span key={l} className="flex items-center gap-2">
+                    {([
+                      ['#3884c8','low gap', ''],
+                      ['#f97316','medium gap', ''],
+                      ['#dc2626','high gap', ''],
+                      ['#7c3aed','consistently overlooked', 'Ranked in the top quartile across all four independent scoring methods. These crises demonstrate persistent underfunding regardless of the analytical lens applied.'],
+                    ] as [string,string,string][]).map(([c,l,tip])=>(
+                      <span key={l} className="flex items-center gap-1">
                         <span className="w-3 h-3 rounded-[6px] inline-block" style={{background: c}} />
                         <span className="font-medium">{l}</span>
+                        {tip && <InfoTip text={tip} />}
                       </span>
                     ))}
                   </div>
@@ -886,7 +910,7 @@ export default function App() {
                 {/* ── WORLD MAP ── */}
                 <div className="border border-[color:var(--color-border)] rounded-[20px] p-8 bg-[color:var(--color-surface)]">
                   <h2 className="font-serif text-[26px] font-normal tracking-[-0.01em] text-[color:var(--color-fg)] leading-tight mb-1">World Map — Overlooked Score {displayYear}</h2>
-                  <p className="text-sm text-[color:var(--color-fg-muted)] mb-6">Hover over a country for details. Purple = robustly overlooked across all ranking methods.</p>
+                  <p className="text-sm text-[color:var(--color-fg-muted)] mb-6">Hover over a country for details. Purple = consistently overlooked across all ranking methods.</p>
 
                   <div className="relative">
                     <ComposableMap projectionConfig={{ scale: 153 }} style={{ background: 'transparent' }}>
@@ -895,7 +919,7 @@ export default function App() {
                           geographies.map(geo => {
                             const iso  = geoIso3(geo) ?? ''
                             const row  = sIsoMap[iso]
-                            const fill = row ? scoreToColor(row.overlooked_score, row.robust) : '#fafafa'
+                            const fill = row ? scoreToColor(row.overlooked_score, row.robust, maxScore) : '#fafafa'
                             return (
                               <Geography
                                 key={geo.rsmKey} geography={geo}
@@ -935,13 +959,13 @@ export default function App() {
                       <div className="flex items-center gap-2 mb-2">
                         <span className="font-semibold text-sm text-[color:var(--color-fg)]">{hoveredCountry.country_name}</span>
                         {hoveredCountry.robust && (
-                          <span className="bg-[color:var(--color-accent-bg)] text-[color:var(--color-accent-hover)] px-1.5 py-0.5 rounded-[6px] text-[10px] font-medium uppercase tracking-wider">Robust</span>
+                          <span className="bg-[color:var(--color-accent-bg)] text-[color:var(--color-accent-hover)] px-1.5 py-0.5 rounded-[6px] text-[10px] font-medium uppercase tracking-wider">Consistently Overlooked</span>
                         )}
                       </div>
                       <div className="space-y-1 text-[color:var(--color-fg-muted)] font-mono tabular-nums">
                         <div className="flex justify-between">
                           <span>Overlooked score</span>
-                          <span style={{ color: scoreToColor(hoveredCountry.overlooked_score, hoveredCountry.robust) }}>
+                          <span style={{ color: scoreToColor(hoveredCountry.overlooked_score, hoveredCountry.robust, maxScore) }}>
                             {hoveredCountry.overlooked_score.toFixed(3)}
                           </span>
                         </div>
@@ -979,7 +1003,7 @@ export default function App() {
                     <span className="font-medium">High gap</span>
                     <span className="ml-4 flex items-center gap-2">
                       <span className="w-3 h-3 rounded-[6px] inline-block" style={{ background: '#7c3aed' }} />
-                      <span className="font-medium">Robustly overlooked</span>
+                      <span className="font-medium">Consistently overlooked</span>
                     </span>
                     <span className="flex items-center gap-2">
                       <span className="w-3 h-3 rounded-[6px] inline-block bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)]" />
@@ -1012,7 +1036,7 @@ export default function App() {
                       </YAxis>
                       <ZAxis range={[40, 40]} />
                       <ReTooltip content={<PcaTooltip />} cursor={{ strokeDasharray: '3 3', stroke: '#a1a1aa' }} />
-                      <Scatter data={rows} shape={<PcaDot />} />
+                      <Scatter data={rows} shape={<PcaDot maxScore={maxScore} />} />
                     </ScatterChart>
                   </ResponsiveContainer>
                 </div>
@@ -1031,11 +1055,21 @@ export default function App() {
                         <tr>
                           <th className="px-4 py-2.5 text-left w-10">#</th>
                           <th className="px-4 py-2.5 text-left">Country</th>
-                          <th className="px-4 py-2.5 text-left min-w-[160px]">Score</th>
-                          <th className="px-4 py-2.5 text-right">Borda</th>
-                          <th className="px-4 py-2.5 text-right">PIN</th>
-                          <th className="px-4 py-2.5 text-right">Funded</th>
-                          <th className="px-4 py-2.5 text-right">Yrs &lt;30%</th>
+                          <th className="px-4 py-2.5 text-left min-w-[160px]">
+                            Score<InfoTip text="overlooked_score = weighted_mean(need_scale, funding_gap, structural, trend) × confidence_weight. All dimensions are normalised to [0, 1]; the weighted mean is computed only over dimensions with available data, then scaled by a source-quality confidence factor." />
+                          </th>
+                          <th className="px-4 py-2.5 text-right">
+                            Borda<InfoTip text="Ensemble validation via Borda count: borda_score = Σ(N − rankᵢ) across four independent orderings — funding coverage ratio (R1), gap × need product (R2), structural underfunding and trend (R3), targeting gap (R4). A low Borda rank confirms the result is not an artefact of weighting choices." />
+                          </th>
+                          <th className="px-4 py-2.5 text-right">
+                            PIN<InfoTip text="People In Need — total caseload requiring humanitarian assistance, as reported in the Humanitarian Needs Overview (HNO). Enters the score as need_scale = log(1 + PIN) / max(log(1 + PIN)), compressing the distribution while preserving relative differences in scale." />
+                          </th>
+                          <th className="px-4 py-2.5 text-right">
+                            Funded<InfoTip text="Funding coverage ratio: FTS disbursements ÷ reported financial requirements. The scoring dimension is funding_gap = 1 − coverage_ratio. Where no formal requirements plan exists, coverage is treated as zero (funding_gap = 1.0)." />
+                          </th>
+                          <th className="px-4 py-2.5 text-right">
+                            Yrs &lt;30%<InfoTip text="Number of years on record in which funding coverage fell below 30% of requirements — an indicator of chronic underfunding. The structural neglect score is computed as 1 − mean(coverage_ratio) across all available years; a minimum of two years of data is required." />
+                          </th>
                           <th className="px-4 py-2.5 text-left min-w-[280px]">Notes</th>
                         </tr>
                       </thead>
@@ -1050,7 +1084,7 @@ export default function App() {
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-[color:var(--color-fg)] text-sm font-medium">{r.country_name}</span>
-                                {r.robust && <span className="text-[10px] font-medium uppercase tracking-wider bg-[color:var(--color-accent-bg)] text-[color:var(--color-accent-hover)] px-1.5 py-0.5 rounded-[6px]">Robust</span>}
+                                {r.robust && <span className="text-[10px] font-medium uppercase tracking-wider bg-[color:var(--color-accent-bg)] text-[color:var(--color-accent-hover)] px-1.5 py-0.5 rounded-[6px]">Consistently Overlooked</span>}
                                 {!r.data_complete && <span className="text-[10px] font-medium uppercase tracking-wider border border-[color:var(--color-border-strong)] text-[color:var(--color-fg-muted)] px-1.5 py-0.5 rounded-[6px]">Partial</span>}
                               </div>
                               <div className="text-xs text-[color:var(--color-fg-subtle)] mt-0.5">{r.region_name}</div>
