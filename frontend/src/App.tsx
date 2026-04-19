@@ -1415,99 +1415,75 @@ export default function App() {
                           </div>
                         )}
 
-                        {/* ═══ DIMENSION DETAIL — glass strengths / weaknesses over tinted backdrops ═══ */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* ═══ DIMENSION DETAIL — strengths / weaknesses (flat) ═══ */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
 
-                          {/* ── STRENGTHS — teal glass over soft teal radial ─── */}
-                          <div className="relative rounded-[24px] p-1.5"
-                            style={{
-                              background: 'radial-gradient(ellipse 90% 100% at 0% 50%, rgba(13,148,136,0.14) 0%, rgba(13,148,136,0.04) 50%, transparent 85%)',
-                            }}>
-                            <div
-                              className="glass rounded-[20px] overflow-hidden"
-                              style={{
-                                borderLeft: '3px solid var(--color-accent)',
-                                background: 'linear-gradient(135deg, rgba(240,253,250,0.72) 0%, rgba(255,255,255,0.72) 40%)',
-                              }}>
-                              <div className="px-4 py-2.5 flex items-baseline justify-between"
-                                style={{ borderBottom: '1px solid rgba(228,228,231,0.5)', background: 'rgba(240,253,250,0.6)' }}>
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--color-accent-hover)]">Strengths on your criteria</p>
-                                <p className="text-[11px] text-[color:var(--color-fg-subtle)] font-mono">{pc.pros.length} dims</p>
-                              </div>
-                              {pc.pros.length === 0 ? (
-                                <p className="px-4 py-4 text-xs text-[color:var(--color-fg-subtle)] italic">No strong signals on your weighted dimensions.</p>
-                              ) : (
-                                <ul>
-                                  {[...pc.pros]
-                                    .sort((a, b) => (b.weight * (b.value ?? 0)) - (a.weight * (a.value ?? 0)))
-                                    .slice(0, 4)
-                                    .map((c, i) => (
-                                      <li key={c.dimension}
-                                        className="px-4 py-3"
-                                        style={i > 0 ? { borderTop: '1px solid rgba(228,228,231,0.5)' } : undefined}>
-                                        <div className="flex items-center gap-2">
-                                          <span className="shrink-0 text-sm leading-none text-[color:var(--color-accent)]">▲</span>
-                                          <span className="text-sm font-semibold text-[color:var(--color-fg)]">{c.label}</span>
-                                          <span className="ml-auto shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] font-mono text-[color:var(--color-accent-hover)]">
-                                            top {Math.round((1 - c.percentile) * 100)}%
-                                          </span>
-                                        </div>
-                                        <p className="text-xs text-[color:var(--color-fg-muted)] leading-relaxed mt-1 pl-5">{c.narrative}</p>
-                                      </li>
-                                    ))}
-                                </ul>
-                              )}
+                          {/* ── STRENGTHS ───────────────────────────────────── */}
+                          <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[20px] overflow-hidden flex flex-col"
+                            style={{ borderLeft: '3px solid var(--color-accent)' }}>
+                            <div className="px-4 py-2.5 flex items-baseline justify-between border-b border-[color:var(--color-border)] bg-[color:var(--color-accent-bg)]">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--color-accent-hover)]">Strengths on your criteria</p>
+                              <p className="text-[11px] text-[color:var(--color-fg-subtle)] font-mono">{pc.pros.length} dims</p>
                             </div>
+                            {pc.pros.length === 0 ? (
+                              <p className="px-4 py-4 text-xs text-[color:var(--color-fg-subtle)] italic">No strong signals on your weighted dimensions.</p>
+                            ) : (
+                              <ul className="divide-y divide-[color:var(--color-border)]">
+                                {[...pc.pros]
+                                  .sort((a, b) => (b.weight * (b.value ?? 0)) - (a.weight * (a.value ?? 0)))
+                                  .slice(0, 4)
+                                  .map(c => (
+                                    <li key={c.dimension} className="px-4 py-3">
+                                      <div className="flex items-center gap-2">
+                                        <span className="shrink-0 text-sm leading-none text-[color:var(--color-accent)]">▲</span>
+                                        <span className="text-sm font-semibold text-[color:var(--color-fg)]">{c.label}</span>
+                                        <span className="ml-auto shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] font-mono text-[color:var(--color-accent-hover)]">
+                                          top {Math.round((1 - c.percentile) * 100)}%
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-[color:var(--color-fg-muted)] leading-relaxed mt-1 pl-5">{c.narrative}</p>
+                                    </li>
+                                  ))}
+                              </ul>
+                            )}
                           </div>
 
-                          {/* ── WEAKNESSES — red glass over soft rose radial ─── */}
-                          <div className="relative rounded-[24px] p-1.5"
-                            style={{
-                              background: 'radial-gradient(ellipse 90% 100% at 100% 50%, rgba(220,38,38,0.12) 0%, rgba(220,38,38,0.03) 50%, transparent 85%)',
-                            }}>
-                            <div
-                              className="glass rounded-[20px] overflow-hidden"
-                              style={{
-                                borderRight: '3px solid #dc2626',
-                                background: 'linear-gradient(225deg, rgba(254,242,242,0.72) 0%, rgba(255,255,255,0.72) 40%)',
-                              }}>
-                              <div className="px-4 py-2.5 flex items-baseline justify-between"
-                                style={{ borderBottom: '1px solid rgba(228,228,231,0.5)', background: 'rgba(254,242,242,0.6)' }}>
-                                <p className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: '#b91c1c' }}>Weaknesses on your criteria</p>
-                                <p className="text-[11px] text-[color:var(--color-fg-subtle)] font-mono">{pc.cons.length} dims</p>
-                              </div>
-                              {pc.cons.length === 0 ? (
-                                <p className="px-4 py-4 text-xs text-[color:var(--color-fg-subtle)] italic">No significant weaknesses on your weighted dimensions.</p>
-                              ) : (
-                                <ul>
-                                  {[...pc.cons]
-                                    .sort((a, b) => (b.weight * (1 - (b.value ?? 1))) - (a.weight * (1 - (a.value ?? 1))))
-                                    .slice(0, 4)
-                                    .map((c, i) => (
-                                      <li key={c.dimension}
-                                        className="px-4 py-3"
-                                        style={i > 0 ? { borderTop: '1px solid rgba(228,228,231,0.5)' } : undefined}>
-                                        <div className="flex items-center gap-2">
-                                          <span className="shrink-0 text-sm leading-none" style={{ color: '#dc2626' }}>▼</span>
-                                          <span className="text-sm font-semibold text-[color:var(--color-fg)]">{c.label}</span>
-                                          <span className="ml-auto shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] font-mono" style={{ color: '#b91c1c' }}>
-                                            btm {Math.round(c.percentile * 100)}%
-                                          </span>
-                                        </div>
-                                        <p className="text-xs text-[color:var(--color-fg-muted)] leading-relaxed mt-1 pl-5">{c.narrative}</p>
-                                        {c.better_country && (
-                                          <p className="text-xs text-[color:var(--color-fg-subtle)] mt-1 pl-5">
-                                            <span className="font-medium text-[color:var(--color-fg-muted)]">{c.better_country.country_name}</span> leads here
-                                            {c.better_country.value != null && c.value != null
-                                              ? <> (<span className="font-mono tabular-nums">{(c.better_country.value * 10).toFixed(1)}</span> vs <span className="font-mono tabular-nums">{(c.value * 10).toFixed(1)}</span>)</>
-                                              : null}.
-                                          </p>
-                                        )}
-                                      </li>
-                                    ))}
-                                </ul>
-                              )}
+                          {/* ── WEAKNESSES ──────────────────────────────────── */}
+                          <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[20px] overflow-hidden flex flex-col"
+                            style={{ borderRight: '3px solid #dc2626' }}>
+                            <div className="px-4 py-2.5 flex items-baseline justify-between border-b border-[color:var(--color-border)] bg-[#fef2f2]">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: '#b91c1c' }}>Weaknesses on your criteria</p>
+                              <p className="text-[11px] text-[color:var(--color-fg-subtle)] font-mono">{pc.cons.length} dims</p>
                             </div>
+                            {pc.cons.length === 0 ? (
+                              <p className="px-4 py-4 text-xs text-[color:var(--color-fg-subtle)] italic">No significant weaknesses on your weighted dimensions.</p>
+                            ) : (
+                              <ul className="divide-y divide-[color:var(--color-border)]">
+                                {[...pc.cons]
+                                  .sort((a, b) => (b.weight * (1 - (b.value ?? 1))) - (a.weight * (1 - (a.value ?? 1))))
+                                  .slice(0, 4)
+                                  .map(c => (
+                                    <li key={c.dimension} className="px-4 py-3">
+                                      <div className="flex items-center gap-2">
+                                        <span className="shrink-0 text-sm leading-none" style={{ color: '#dc2626' }}>▼</span>
+                                        <span className="text-sm font-semibold text-[color:var(--color-fg)]">{c.label}</span>
+                                        <span className="ml-auto shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] font-mono" style={{ color: '#b91c1c' }}>
+                                          btm {Math.round(c.percentile * 100)}%
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-[color:var(--color-fg-muted)] leading-relaxed mt-1 pl-5">{c.narrative}</p>
+                                      {c.better_country && (
+                                        <p className="text-xs text-[color:var(--color-fg-subtle)] mt-1 pl-5">
+                                          <span className="font-medium text-[color:var(--color-fg-muted)]">{c.better_country.country_name}</span> leads here
+                                          {c.better_country.value != null && c.value != null
+                                            ? <> (<span className="font-mono tabular-nums">{(c.better_country.value * 10).toFixed(1)}</span> vs <span className="font-mono tabular-nums">{(c.value * 10).toFixed(1)}</span>)</>
+                                            : null}.
+                                        </p>
+                                      )}
+                                    </li>
+                                  ))}
+                              </ul>
+                            )}
                           </div>
                         </div>
 
