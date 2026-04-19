@@ -35,3 +35,4 @@ dependencies:
       - openai==1.86.0
       - databricks-sdk==0.102.0
       - databricks-sql-connector==3.7.0
+1

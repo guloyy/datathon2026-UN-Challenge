@@ -49,6 +49,23 @@ class QueryResponse(BaseModel):
     row_count: int
 
 
+class PrioritizeIntentOverride(BaseModel):
+    mode: str
+    country_iso3: str | None = None
+    sector: str | None = None
+    region: str | None = None
+    emergency_group: str | None = None
+    year: int | None = None
+    hints: list[str] = []
+
+
+class PrioritizeRequest(BaseModel):
+    query: str
+    k: int = 3
+    use_llm_prose: bool = True
+    intent_override: PrioritizeIntentOverride | None = None
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @app.get("/health")
@@ -80,3 +97,54 @@ def run_query(req: QueryRequest):
         rows=df.to_dict(orient="records"),
         row_count=len(df),
     )
+
+
+@app.post("/prioritize")
+def run_prioritize(req: PrioritizeRequest):
+    """
+    Turn an HC-style intent ("prioritize Brazil for water supply") into a
+    defensible weight vector that places the target in the top-k, or explain
+    why it cannot.
+
+    If `intent_override` is supplied, the NL parser is bypassed (useful when
+    ANTHROPIC_API_KEY is not configured).
+    """
+    from src.prioritize.intent import Intent
+    from src.prioritize.pipeline import prioritize
+    from src.prioritize.weights import InfeasibleError
+
+    intent = None
+    if req.intent_override is not None:
+        intent = Intent(
+            mode=req.intent_override.mode,
+            country_iso3=req.intent_override.country_iso3,
+            sector=req.intent_override.sector,
+            region=req.intent_override.region,
+            emergency_group=req.intent_override.emergency_group,
+            year=req.intent_override.year,
+            hints=req.intent_override.hints,
+            raw_query=req.query,
+        )
+
+    try:
+        response = prioritize(
+            req.query,
+            k=req.k,
+            intent=intent,
+            use_llm_prose=req.use_llm_prose,
+        )
+    except InfeasibleError as e:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "infeasible",
+                "reason": e.reason,
+                "blocking_rows": e.blocking_rows,
+            },
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Prioritize failed: {e}")
+
+    return response
