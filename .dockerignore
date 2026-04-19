@@ -1,0 +1,14 @@
+**/__pycache__
+**/*.pyc
+**/*.pyo
+.git
+.env
+frontend/node_modules
+frontend/dist
+data/raw
+*.egg-info
+.pytest_cache
+.venv
+notebooks
+docs
+tests

@@ -1,9 +1,8 @@
 # ── Secrets ───────────────────────────────────────────────────────────────────
 .env
 
-# ── Data — never commit raw or processed data files ──────────────────────────
+# ── Data — raw files only; processed snapshots are committed for offline use ──
 data/raw/
-data/processed/
 
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/

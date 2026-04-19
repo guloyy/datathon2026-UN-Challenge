@@ -52,6 +52,7 @@ app.add_middleware(
 )
 
 
+
 # ── Models ────────────────────────────────────────────────────────────────────
 
 class QueryRequest(BaseModel):
@@ -131,6 +132,14 @@ def run_query(req: QueryRequest):
 
     try:
         sql, df = query(req.query, year_filter=(req.year_from, req.year_to))
+    except EnvironmentError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "The SQL Query tab requires a live Databricks connection. "
+                "Set DATABRICKS_HOST, DATABRICKS_TOKEN, and DATABRICKS_HTTP_PATH in your .env file."
+            ),
+        )
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
@@ -210,6 +219,16 @@ def analyze(req: AnalyzeRequest):
             weights, importance_scores, interpretation = extract_weights(
                 req.prompt, previous_scores=req.previous_scores
             )
+        except RuntimeError as e:
+            if "DATABRICKS_HOST" in str(e) or "DATABRICKS_TOKEN" in str(e):
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "The Prioritize tab requires Databricks credentials for AI features. "
+                        "Set DATABRICKS_HOST and DATABRICKS_TOKEN in your .env file."
+                    ),
+                )
+            raise HTTPException(status_code=502, detail=f"Weight extraction failed: {e}")
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"Weight extraction failed: {e}")
 
@@ -289,3 +308,21 @@ def analyze(req: AnalyzeRequest):
         dimension_leaders=dimension_leaders,
         full_rank_map=full_rank_map,
     )
+
+
+# ── Frontend static files (production / Docker only) ─────────────────────────
+# Must be registered AFTER all API routes so it doesn't shadow them.
+_static = Path(__file__).resolve().parents[1] / "static"
+if _static.exists():
+    from fastapi.responses import FileResponse
+
+    @app.get("/", include_in_schema=False)
+    def serve_root():
+        return FileResponse(_static / "index.html")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def serve_spa(full_path: str):
+        file = _static / full_path
+        if file.is_file():
+            return FileResponse(file)
+        return FileResponse(_static / "index.html")

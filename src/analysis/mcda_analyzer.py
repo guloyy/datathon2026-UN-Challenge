@@ -156,8 +156,13 @@ def _get_client():
     from openai import OpenAI
     from dotenv import load_dotenv
     load_dotenv()
-    host  = os.environ["DATABRICKS_HOST"].rstrip("/")
-    token = os.environ["DATABRICKS_TOKEN"]
+    host  = os.environ.get("DATABRICKS_HOST", "").rstrip("/")
+    token = os.environ.get("DATABRICKS_TOKEN", "")
+    if not host or not token:
+        raise RuntimeError(
+            "DATABRICKS_HOST and DATABRICKS_TOKEN are required for AI features. "
+            "Add them to your .env file."
+        )
     return OpenAI(api_key=token, base_url=f"{host}/serving-endpoints")
 
 

@@ -340,6 +340,42 @@ function PcaTooltip({ active, payload }: { active?: boolean; payload?: { payload
   )
 }
 
+// ── Column label mapping for query results ────────────────────────────────────
+const COLUMN_LABELS: Record<string, string> = {
+  country_iso3:        'Country Code',
+  country_name:        'Country',
+  continent:           'Continent',
+  region_name:         'Region',
+  year:                'Year',
+  sector:              'Sector',
+  rank:                'Rank',
+  borda_rank:          'Borda Rank',
+  mcda_rank:           'Priority Rank',
+  mcda_score:          'MCDA Score',
+  overlooked_score:    'Overlooked Score',
+  gap_component:       'Gap Component',
+  confidence_weight:   'Confidence',
+  need_scale:          'Need Scale',
+  funding_gap:         'Funding Gap',
+  structural_score:    'Structural Score',
+  structural_neglect:  'Structural Neglect',
+  trend_score:         'Trend Score',
+  trend_worsening:     'Trend (Worsening)',
+  rank_delta:          'Rank Change',
+  has_vulnerability:   'Has Vulnerability',
+  pin:                 'People in Need',
+  targeted:            'Targeted Population',
+  requirements_usd:    'Requirements (USD)',
+  fts_funding_usd:     'FTS Funding (USD)',
+  coverage_ratio:      'Coverage Ratio',
+  coverage_slope:      'Coverage Trend',
+  years_underfunded:   'Years Underfunded',
+  n_coverage_years:    '# Coverage Years',
+  robust:              'Robust',
+  data_complete:       'Data Complete',
+  explanation:         'Explanation',
+}
+
 // ── Main app ─────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -1794,7 +1830,7 @@ export default function App() {
                     .map(r => ({
                       x:        Math.round((r.coverage_ratio as number) * 100),
                       y:        Math.round(((r.inform_severity as number) * 5) * 10) / 10,
-                      z:        r.pin ? Math.max(4, Math.sqrt(r.pin / 1e5) * 6) : 4,
+                      z:        r.pin != null ? Math.max(4, Math.sqrt((r.pin as number) / 1e5) * 6) : 4,
                       name:     r.country_name,
                       iso3:     r.country_iso3,
                       continent:r.continent ?? '',
@@ -2014,7 +2050,9 @@ export default function App() {
                     <table className="w-full text-sm">
                       <thead className="text-[color:var(--color-fg-muted)] text-xs uppercase border-b border-[color:var(--color-border)]">
                         <tr>{qResult.columns.map(col => (
-                          <th key={col} className="px-4 py-3 text-left font-medium whitespace-nowrap">{col}</th>
+                          <th key={col} className="px-4 py-3 text-left font-medium whitespace-nowrap">
+                            {COLUMN_LABELS[col] ?? col.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                          </th>
                         ))}</tr>
                       </thead>
                       <tbody className="divide-y divide-[color:var(--color-border)]">
