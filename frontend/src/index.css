@@ -1,3 +1,126 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource/jetbrains-mono/600.css";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --color-surface:         #ffffff;
+  --color-surface-muted:   #fafafa;
+  --color-border:          #e4e4e7;
+  --color-border-strong:   #d4d4d8;
+  --color-fg:              #18181b;
+  --color-fg-muted:        #52525b;
+  --color-fg-subtle:       #a1a1aa;
+  --color-accent:          #0d9488;
+  --color-accent-hover:    #0f766e;
+  --color-accent-bg:       #f0fdfa;
+}
+
+html, body, #root {
+  background: var(--color-surface);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01", "tnum";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+*:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-surface), 0 0 0 4px var(--color-accent);
+  border-radius: 4px;
+}
+
+.tabular-nums,
+.font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Custom range slider — uniform look regardless of accent color ──────── */
+input[type="range"].dim-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  /* fallback; the inline style sets the real gradient per slider */
+  background: var(--color-border);
+}
+
+input[type="range"].dim-slider:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* WebKit (Chrome, Safari, Edge) */
+input[type="range"].dim-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: transparent;
+}
+input[type="range"].dim-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--slider-color, var(--color-accent));
+  margin-top: -6px;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px var(--color-border);
+  transition: transform 150ms ease-out;
+}
+input[type="range"].dim-slider:not(:disabled):hover::-webkit-slider-thumb {
+  transform: scale(1.1);
+}
+
+/* Firefox */
+input[type="range"].dim-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-border);
+}
+input[type="range"].dim-slider::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--slider-color, var(--color-accent));
+}
+input[type="range"].dim-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--slider-color, var(--color-accent));
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px var(--color-border);
+  transition: transform 150ms ease-out;
+}
+input[type="range"].dim-slider:not(:disabled):hover::-moz-range-thumb {
+  transform: scale(1.1);
+}

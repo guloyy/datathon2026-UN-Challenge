@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, type MouseEvent } from 'react'
 import axios from 'axios'
 import {
-  ScatterChart, Scatter, XAxis, YAxis, ZAxis,
+  ScatterChart, Scatter, XAxis, YAxis, ZAxis, CartesianGrid,
   Tooltip as ReTooltip, ResponsiveContainer, ReferenceLine,
   Label,
 } from 'recharts'
@@ -9,6 +9,33 @@ import { ComposableMap, Geographies, Geography } from 'react-simple-maps'
 
 const GEO_URL = 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
 const YEARS = [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+
+// world-atlas@2 topojson has only `id` (ISO-3166-1 numeric) — no alpha-3 codes.
+// Map numeric → alpha-3 so the choropleth can join against country_iso3 from the backend.
+const NUM_TO_ISO3: Record<string, string> = {
+  '004':'AFG','008':'ALB','012':'DZA','020':'AND','024':'AGO','028':'ATG','031':'AZE','032':'ARG','036':'AUS','040':'AUT',
+  '044':'BHS','048':'BHR','050':'BGD','051':'ARM','052':'BRB','056':'BEL','064':'BTN','068':'BOL','070':'BIH','072':'BWA',
+  '076':'BRA','084':'BLZ','090':'SLB','096':'BRN','100':'BGR','104':'MMR','108':'BDI','112':'BLR','116':'KHM','120':'CMR',
+  '124':'CAN','132':'CPV','140':'CAF','144':'LKA','148':'TCD','152':'CHL','156':'CHN','158':'TWN','170':'COL','174':'COM',
+  '178':'COG','180':'COD','188':'CRI','191':'HRV','192':'CUB','196':'CYP','203':'CZE','204':'BEN','208':'DNK','212':'DMA',
+  '214':'DOM','218':'ECU','222':'SLV','226':'GNQ','231':'ETH','232':'ERI','233':'EST','242':'FJI','246':'FIN','250':'FRA',
+  '260':'ATF','262':'DJI','266':'GAB','268':'GEO','270':'GMB','275':'PSE','276':'DEU','288':'GHA','296':'KIR','300':'GRC',
+  '304':'GRL','308':'GRD','320':'GTM','324':'GIN','328':'GUY','332':'HTI','340':'HND','344':'HKG','348':'HUN','352':'ISL',
+  '356':'IND','360':'IDN','364':'IRN','368':'IRQ','372':'IRL','376':'ISR','380':'ITA','384':'CIV','388':'JAM','392':'JPN',
+  '398':'KAZ','400':'JOR','404':'KEN','408':'PRK','410':'KOR','414':'KWT','417':'KGZ','418':'LAO','422':'LBN','426':'LSO',
+  '428':'LVA','430':'LBR','434':'LBY','438':'LIE','440':'LTU','442':'LUX','450':'MDG','454':'MWI','458':'MYS','462':'MDV',
+  '466':'MLI','470':'MLT','478':'MRT','480':'MUS','484':'MEX','496':'MNG','498':'MDA','499':'MNE','504':'MAR','508':'MOZ',
+  '512':'OMN','516':'NAM','520':'NRU','524':'NPL','528':'NLD','540':'NCL','548':'VUT','554':'NZL','558':'NIC','562':'NER',
+  '566':'NGA','578':'NOR','586':'PAK','591':'PAN','598':'PNG','600':'PRY','604':'PER','608':'PHL','616':'POL','620':'PRT',
+  '624':'GNB','626':'TLS','630':'PRI','634':'QAT','642':'ROU','643':'RUS','646':'RWA','682':'SAU','686':'SEN','688':'SRB',
+  '690':'SYC','694':'SLE','702':'SGP','703':'SVK','704':'VNM','705':'SVN','706':'SOM','710':'ZAF','716':'ZWE','724':'ESP',
+  '728':'SSD','729':'SDN','732':'ESH','740':'SUR','748':'SWZ','752':'SWE','756':'CHE','760':'SYR','762':'TJK','764':'THA',
+  '768':'TGO','780':'TTO','784':'ARE','788':'TUN','792':'TUR','795':'TKM','798':'TUV','800':'UGA','804':'UKR','807':'MKD',
+  '818':'EGY','826':'GBR','834':'TZA','840':'USA','854':'BFA','858':'URY','860':'UZB','862':'VEN','882':'WSM','887':'YEM',
+  '894':'ZMB','-99':'XKX',
+}
+const geoIso3 = (geo: { id?: string | number; properties?: Record<string, unknown> }) =>
+  NUM_TO_ISO3[String(geo.id ?? '').padStart(3, '0')] ?? null
 
 // ── Weights ───────────────────────────────────────────────────────────────────
 
@@ -212,9 +239,9 @@ function ScoreBar({ row, maxScore }: { row: ScoreRow; maxScore: number }) {
   const bonusW = ((row.overlooked_score - row.gap_component) / maxScore) * 100
   return (
     <div className="flex items-center gap-1.5">
-      <div className="flex h-2 w-28 rounded overflow-hidden bg-gray-800">
+      <div className="flex h-2 w-28 rounded overflow-hidden bg-[color:var(--color-surface-muted)]">
         <div style={{ width: `${gapW}%`, background: scoreToColor(row.overlooked_score) }} />
-        <div style={{ width: `${Math.max(0, bonusW)}%` }} className="bg-purple-500 opacity-70" />
+        <div style={{ width: `${Math.max(0, bonusW)}%` }} className="bg-[color:var(--color-fg-muted)] opacity-40" />
       </div>
       <span className="text-xs font-mono" style={{ color: scoreToColor(row.overlooked_score) }}>
         {row.overlooked_score.toFixed(3)}
@@ -269,21 +296,21 @@ function BubbleTooltip({ active, payload }: { active?: boolean; payload?: { payl
   if (!active || !payload?.length) return null
   const r = payload[0].payload
   return (
-    <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 text-xs shadow-xl max-w-xs">
-      <div className="font-semibold text-white flex items-center gap-1.5 mb-1">
+    <div className="bg-white rounded-md p-3 text-xs shadow-md max-w-xs" style={{ boxShadow: '0 2px 8px rgba(24, 24, 27, 0.08)' }}>
+      <div className="font-semibold text-[color:var(--color-fg)] flex items-center gap-2 mb-1.5">
         {r.country_name}
-        {r.robust && <span className="bg-purple-900 text-purple-300 px-1.5 py-0.5 rounded text-xs">Robust</span>}
+        {r.robust && <span className="bg-[color:var(--color-accent-bg)] text-[color:var(--color-accent-hover)] px-1.5 py-0.5 rounded-sm text-[10px] font-medium uppercase tracking-wider">Robust</span>}
       </div>
-      <div className="text-gray-400 space-y-0.5">
-        <div>Score: <span className="text-white font-mono">{r.overlooked_score.toFixed(3)}</span>
-          <span className="text-gray-600 ml-2">Borda #{r.borda_rank}</span></div>
-        <div>People in need: <span className="text-orange-300">{millions(r.pin)}</span></div>
-        <div>Funded: <span className="text-blue-300">{pct(r.coverage_ratio)}</span></div>
-        <div>Requirements: <span className="text-gray-300">${millions(r.requirements_usd)}</span></div>
+      <div className="text-[color:var(--color-fg-muted)] space-y-0.5 font-mono tabular-nums">
+        <div>Score: <span className="text-[color:var(--color-fg)]">{r.overlooked_score.toFixed(3)}</span>
+          <span className="text-[color:var(--color-fg-subtle)] ml-2">Borda #{r.borda_rank}</span></div>
+        <div>People in need: <span className="text-[color:var(--color-fg)]">{millions(r.pin)}</span></div>
+        <div>Funded: <span className="text-[color:var(--color-fg)]">{pct(r.coverage_ratio)}</span></div>
+        <div>Requirements: <span className="text-[color:var(--color-fg)]">${millions(r.requirements_usd)}</span></div>
         {(r.years_underfunded ?? 0) > 0 &&
           <div>Underfunded {r.years_underfunded}/{r.n_coverage_years} years</div>}
       </div>
-      <div className="mt-2 text-gray-500 leading-relaxed">{r.explanation}</div>
+      <div className="mt-2 text-[color:var(--color-fg-muted)] leading-relaxed">{r.explanation}</div>
     </div>
   )
 }
@@ -294,14 +321,14 @@ function PcaTooltip({ active, payload }: { active?: boolean; payload?: { payload
   if (!active || !payload?.length) return null
   const r = payload[0].payload
   return (
-    <div className="bg-gray-900 border border-gray-700 rounded-lg p-3 text-xs shadow-xl max-w-xs">
-      <div className="font-semibold text-white mb-1">
+    <div className="bg-white rounded-md p-3 text-xs shadow-md max-w-xs" style={{ boxShadow: '0 2px 8px rgba(24, 24, 27, 0.08)' }}>
+      <div className="font-semibold text-[color:var(--color-fg)] mb-1.5">
         {r.country_name} {r.robust ? '★' : ''}
       </div>
-      <div className="text-gray-400 space-y-0.5">
-        <div>Score: <span className="text-white font-mono">{r.overlooked_score.toFixed(3)}</span></div>
-        <div>Borda rank: <span className="text-white">#{r.borda_rank}</span></div>
-        <div className="text-gray-500 mt-1">{r.explanation.split(';')[0]}</div>
+      <div className="text-[color:var(--color-fg-muted)] space-y-0.5 font-mono tabular-nums">
+        <div>Score: <span className="text-[color:var(--color-fg)]">{r.overlooked_score.toFixed(3)}</span></div>
+        <div>Borda rank: <span className="text-[color:var(--color-fg)]">#{r.borda_rank}</span></div>
+        <div className="text-[color:var(--color-fg-subtle)] mt-1 font-sans">{r.explanation.split(';')[0]}</div>
       </div>
     </div>
   )
@@ -331,7 +358,7 @@ export default function App() {
   const [aRefine, setARefine]         = useState('')
   const [aFocusRaw, setAFocusRaw]     = useState('')   // user-typed country (name or ISO3)
   const [aCountry, setACountry]       = useState('')   // resolved ISO3
-  const [aYear, setAYear]             = useState(2024)
+  const [aYear]                        = useState(2025)
   const [aLoading, setALoading]       = useState(false)
   const [aError, setAError]           = useState<string | null>(null)
   const [aResult, setAResult]         = useState<AnalyzeResponse | null>(null)
@@ -340,8 +367,11 @@ export default function App() {
   const [aSortDir, setASortDir]       = useState<1|-1>(1)
   const [aCompare, setACompare]       = useState<Set<string>>(new Set())
   const [aSearch, setASearch]         = useState('')
-  const [dataSource, setDataSource]   = useState<'databricks' | 'parquet' | 'unknown'>('unknown')
   const [showGlossary, setShowGlossary] = useState(false)
+  const [pendingScores, setPendingScores] = useState<Record<string, number>>({})
+  const [dimOrder, setDimOrder] = useState<string[]>([])
+  const [typewriter, setTypewriter] = useState('')
+  const [sqlTypewriter, setSqlTypewriter] = useState('')
 
   const aBase = (countryIso3: string | null = null) => ({
     year: aYear, sector: aSector,
@@ -404,7 +434,7 @@ export default function App() {
 
   async function handleAdjustScore(dim: string, delta: number) {
     if (!aResult) return
-    const updated = { ...aResult.importance_scores, [dim]: Math.max(1, Math.min(10, aResult.importance_scores[dim] + delta)) }
+    const updated = { ...aResult.importance_scores, [dim]: Math.max(0, Math.min(10, aResult.importance_scores[dim] + delta)) }
     setALoading(true); setAError(null)
     try {
       const { data } = await axios.post<AnalyzeResponse>('/analyze', {
@@ -457,11 +487,84 @@ export default function App() {
   // Auto-load on mount
   useEffect(() => {
     runScore(2024, DEFAULT_WEIGHTS)
-    axios.get<{ data_source: string }>('/health').then(r => {
-      const src = r.data.data_source as 'databricks' | 'parquet' | 'unknown'
-      setDataSource(src)
-    }).catch(() => {})
   }, [runScore])
+
+  // Mirror backend importance scores into local slider state on every analyze response.
+  // Also capture the dimension display order on the FIRST response so sliders
+  // don't reshuffle as scores change.
+  useEffect(() => {
+    if (aResult) {
+      setPendingScores(aResult.importance_scores)
+      setDimOrder(prev => prev.length > 0 ? prev : Object.keys(aResult.importance_scores))
+    }
+  }, [aResult])
+
+  // Typewriter placeholder for the Prioritize prompt — cycles example mandates
+  // when the textarea is empty. Pauses when the user starts typing.
+  useEffect(() => {
+    if (aPrompt.trim().length > 0) return
+    const examples = [
+      'Water scarcity in chronically neglected conflict zones',
+      'Food insecurity at massive scale regardless of funding trend',
+      'Structural neglect and governance fragility',
+      'Climate-vulnerable displacement crises',
+    ]
+    let i = 0, j = 0, dir: 'type' | 'hold' | 'erase' = 'type'
+    let cancelled = false
+    const tick = () => {
+      if (cancelled) return
+      const full = examples[i]
+      if (dir === 'type') {
+        j += 1
+        setTypewriter(full.slice(0, j))
+        if (j >= full.length) { dir = 'hold'; setTimeout(tick, 1600); return }
+        setTimeout(tick, 45)
+      } else if (dir === 'hold') {
+        dir = 'erase'
+        setTimeout(tick, 0)
+      } else {
+        j -= 1
+        setTypewriter(full.slice(0, j))
+        if (j <= 0) { dir = 'type'; i = (i + 1) % examples.length; setTimeout(tick, 120); return }
+        setTimeout(tick, 22)
+      }
+    }
+    tick()
+    return () => { cancelled = true }
+  }, [aPrompt])
+
+  // Typewriter placeholder for the SQL Query prompt — cycles example queries.
+  useEffect(() => {
+    if (query.trim().length > 0) return
+    const examples = [
+      'Which African countries have the most people in need but under 30% funded in 2024?',
+      'Top 10 countries with the largest funding shortfall in 2025',
+      'WASH-sector crises with coverage below 20%',
+      'Countries where coverage has worsened every year since 2020',
+    ]
+    let i = 0, j = 0, dir: 'type' | 'hold' | 'erase' = 'type'
+    let cancelled = false
+    const tick = () => {
+      if (cancelled) return
+      const full = examples[i]
+      if (dir === 'type') {
+        j += 1
+        setSqlTypewriter(full.slice(0, j))
+        if (j >= full.length) { dir = 'hold'; setTimeout(tick, 1600); return }
+        setTimeout(tick, 45)
+      } else if (dir === 'hold') {
+        dir = 'erase'
+        setTimeout(tick, 0)
+      } else {
+        j -= 1
+        setSqlTypewriter(full.slice(0, j))
+        if (j <= 0) { dir = 'type'; i = (i + 1) % examples.length; setTimeout(tick, 120); return }
+        setTimeout(tick, 22)
+      }
+    }
+    tick()
+    return () => { cancelled = true }
+  }, [query])
 
   // Animation
   useEffect(() => {
@@ -523,208 +626,202 @@ export default function App() {
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 flex flex-col">
-
-      {/* Header */}
-      <header className="border-b border-gray-800 px-8 py-4 flex items-center gap-3">
-        <div>
-          <h1 className="text-lg font-bold text-white leading-none tracking-tight">Geo-Insight</h1>
-          <p className="text-xs text-gray-500 mt-0.5">Which humanitarian crises are most overlooked?</p>
-        </div>
-        <div className="ml-auto flex items-center gap-2 text-xs text-gray-500">
-          <span className="bg-gray-900 border border-gray-800 px-2 py-1 rounded font-mono">Llama 4 Maverick</span>
-          {dataSource === 'databricks' ? (
-            <span className="bg-green-950 border border-green-800 text-green-400 px-2 py-1 rounded font-mono flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block" />
-              Live · Databricks
-            </span>
-          ) : dataSource === 'parquet' ? (
-            <span className="bg-amber-950 border border-amber-800 text-amber-400 px-2 py-1 rounded font-mono flex items-center gap-1"
-              title="Databricks unreachable — using local parquet snapshots">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
-              Parquet snapshot
-            </span>
-          ) : (
-            <span className="bg-gray-900 border border-gray-800 px-2 py-1 rounded font-mono">Databricks</span>
-          )}
-          <button
-            onClick={() => axios.post('/refresh').then(r => setDataSource((r.data as {data_source: string}).data_source as 'databricks'|'parquet'|'unknown')).catch(()=>{})}
-            className="bg-gray-900 border border-gray-800 hover:border-gray-600 px-2 py-1 rounded font-mono hover:text-gray-300 transition-colors"
-            title="Reload data from Databricks">
-            ↺
-          </button>
-        </div>
-      </header>
+    <div className="min-h-screen bg-[color:var(--color-surface)] text-[color:var(--color-fg)] flex flex-col">
 
       {/* Tabs */}
-      <div className="border-b border-gray-800 px-8 flex gap-1 pt-2">
+      <div className="border-b border-[color:var(--color-border)] px-8 flex gap-6">
         {([
-          ['score',   '📊 Gap Scoring'],
-          ['analyze', '🎯 Prioritize'],
-          ['query',   '🔍 SQL Query'],
+          ['score',   'Gap Scoring'],
+          ['analyze', 'Prioritize'],
+          ['query',   'SQL Query'],
         ] as const).map(([t, label]) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-              tab === t ? 'bg-gray-900 text-white border border-b-gray-900 border-gray-700'
-                        : 'text-gray-500 hover:text-gray-300'}`}>
+            className={`px-0 py-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
+ tab === t
+                ? 'text-[color:var(--color-fg)] border-[color:var(--color-accent)]'
+                : 'text-[color:var(--color-fg-muted)] border-transparent hover:text-[color:var(--color-fg)]'}`}>
             {label}
           </button>
         ))}
       </div>
 
-      <main className="flex-1 px-6 py-6 max-w-7xl mx-auto w-full">
+      <main className="flex-1 px-8 py-8 max-w-7xl mx-auto w-full">
 
         {/* ═══ SCORE TAB ═══════════════════════════════════════════════════ */}
         {tab === 'score' && (
           <div className="flex flex-col gap-8">
 
             {/* Controls */}
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 flex flex-wrap items-end gap-6">
+            <div className="flex flex-col gap-6">
 
-              {/* Year selector + play */}
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">Year</span>
-                <div className="flex items-center gap-2">
-                  <div className="flex rounded-lg overflow-hidden border border-gray-700">
-                    {YEARS.map(y => (
-                      <button key={y} onClick={() => { setPlaying(false); setScoreYear(y); runScore(y, weights) }}
-                        className={`px-3 py-1.5 text-xs font-mono transition-colors ${
-                          displayYear === y
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}>
-                        {y}
-                      </button>
+              <div className="flex flex-wrap items-end gap-8">
+
+                {/* Year selector + play */}
+                <div className="flex flex-col gap-2">
+                  <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-[color:var(--color-fg-muted)]">Year</span>
+                  <div className="flex items-center gap-3">
+                    <div className="inline-flex rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)] p-0.5">
+                      {YEARS.map(y => (
+                        <button key={y} onClick={() => { setPlaying(false); setScoreYear(y); runScore(y, weights) }}
+                          className={`px-3 py-1 text-[13px] font-mono tabular-nums rounded transition-colors ${
+ displayYear === y
+                              ? 'bg-[color:var(--color-surface)] text-[color:var(--color-fg)] shadow-sm'
+                              : 'text-[color:var(--color-fg-muted)] hover:text-[color:var(--color-fg)]'}`}>
+                          {y}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => { setAnimYear(scoreYear); setPlaying(p => !p) }}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+ playing
+                          ? 'border-[color:var(--color-accent)] text-[color:var(--color-accent)] bg-[color:var(--color-accent-bg)]'
+                          : 'border-[color:var(--color-border)] text-[color:var(--color-fg-muted)] hover:text-[color:var(--color-fg)] hover:border-[color:var(--color-border-strong)]'}`}>
+                      {playing ? (
+                        <><svg className="w-3 h-3" viewBox="0 0 10 10" fill="currentColor"><rect x="2" y="2" width="6" height="6" /></svg> Stop</>
+                      ) : (
+                        <><svg className="w-3 h-3" viewBox="0 0 10 10" fill="currentColor"><polygon points="2,1 9,5 2,9" /></svg> Animate</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Weight summary — stacked chips with fill bars */}
+                <div className="flex flex-col gap-2 flex-1 min-w-[280px]">
+                  <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-[color:var(--color-fg-muted)]">Active weights</span>
+                  <div className="grid grid-cols-4 gap-4">
+                    {(['scale','gap','structural','trend'] as (keyof Weights)[]).map(k => (
+                      <div key={k} className="flex flex-col gap-1">
+                        <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-[color:var(--color-fg-muted)]">{k}</span>
+                        <span className="text-sm font-mono font-medium tabular-nums text-[color:var(--color-fg)]">{weights[k].toFixed(2)}</span>
+                        <div className="h-1 rounded-full bg-[color:var(--color-border)] overflow-hidden">
+                          <div className="h-full bg-[color:var(--color-accent)]" style={{ width: `${weights[k] * 100}%` }} />
+                        </div>
+                      </div>
                     ))}
                   </div>
-                  <button
-                    onClick={() => { setAnimYear(scoreYear); setPlaying(p => !p) }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                      playing ? 'border-red-700 text-red-400 bg-red-950' : 'border-gray-700 text-gray-300 hover:border-blue-600 hover:text-blue-400'}`}>
-                    {playing ? '⏹ Stop' : '▶ Animate'}
-                  </button>
                 </div>
-              </div>
 
-              {/* Weight summary */}
-              <div className="flex flex-col gap-1.5 flex-1 min-w-52">
-                <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">Active weights</span>
-                <div className="flex gap-3 text-xs font-mono">
-                  {(['scale','gap','structural','trend'] as (keyof Weights)[]).map(k => (
-                    <span key={k} className="flex flex-col items-center">
-                      <span className="text-blue-400">{weights[k].toFixed(2)}</span>
-                      <span className="text-gray-600">{k}</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex gap-2">
-                <button onClick={() => runScore(scoreYear, weights)} disabled={sLoading}
-                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">
-                  {sLoading ? '…' : 'Recalculate'}
-                </button>
-                {sResult && (
-                  <button onClick={() => exportCsv(sResult.rows, sResult.year)}
-                    className="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-300 px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5">
-                    ↓ CSV
+                <div className="flex gap-2 ml-auto">
+                  <button onClick={() => runScore(scoreYear, weights)} disabled={sLoading}
+                    className="bg-[color:var(--color-accent)] hover:bg-[color:var(--color-accent-hover)] disabled:bg-[color:var(--color-border)] disabled:text-[color:var(--color-fg-subtle)] disabled:cursor-not-allowed text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                    {sLoading ? '…' : 'Recalculate'}
                   </button>
-                )}
+                  {sResult && (
+                    <button onClick={() => exportCsv(sResult.rows, sResult.year)}
+                      className="border border-[color:var(--color-border)] hover:border-[color:var(--color-border-strong)] text-[color:var(--color-fg-muted)] hover:text-[color:var(--color-fg)] px-3 py-2 rounded-md text-sm font-medium transition-colors">
+                      ↓ CSV
+                    </button>
+                  )}
+                </div>
+
               </div>
 
-              {/* Formula */}
-              <div className="w-full text-xs text-gray-600 font-mono bg-gray-800/50 rounded-lg px-4 py-2 leading-relaxed">
-                <span className="text-gray-300">overlooked</span> = (
-                <span className="text-orange-400">w_scale·scale</span> +
-                <span className="text-blue-400"> w_gap·gap</span> +
-                <span className="text-purple-400"> w_structural·structural</span> +
-                <span className="text-yellow-600"> w_trend·trend</span>) ×
-                <span className="text-green-600"> confidence</span>
-                <span className="ml-3 text-gray-700">· validated by Borda ensemble of 4 rankings</span>
+              {/* Formula — its own documentation panel */}
+              <div className="bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] rounded-md px-4 py-3">
+                <div className="text-[11px] font-medium uppercase tracking-[0.06em] text-[color:var(--color-fg-muted)] mb-1.5">Formula</div>
+                <div className="text-xs font-mono tabular-nums text-[color:var(--color-fg-muted)] leading-relaxed pl-2">
+                  <span className="text-[color:var(--color-fg)] font-semibold">overlooked</span> = (
+                  <span className="text-[color:var(--color-fg)] font-semibold">w_scale·scale</span> +
+                  <span className="text-[color:var(--color-fg)] font-semibold"> w_gap·gap</span> +
+                  <span className="text-[color:var(--color-fg)] font-semibold"> w_structural·structural</span> +
+                  <span className="text-[color:var(--color-fg)] font-semibold"> w_trend·trend</span>) ×
+                  <span className="text-[color:var(--color-fg)] font-semibold"> confidence</span>
+                  <span className="ml-3 text-[color:var(--color-fg-subtle)]">· validated by Borda ensemble of 4 rankings</span>
+                </div>
               </div>
             </div>
 
             {sError && (
-              <div className="bg-red-950 border border-red-800 text-red-300 rounded-xl px-4 py-3 text-sm">{sError}</div>
+              <div className="bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] rounded-md px-4 py-3 text-sm text-[color:var(--color-fg)]">{sError}</div>
             )}
 
             {sLoading && !sResult && (
-              <div className="flex items-center justify-center py-24 text-gray-600">
+              <div className="flex items-center justify-center py-24 text-[color:var(--color-fg-subtle)]">
                 <div className="text-sm">Loading {displayYear} data…</div>
               </div>
             )}
 
             {sResult && (
               <>
-                {/* Stat cards */}
-                <div className="grid grid-cols-4 gap-3">
+                {/* Stat cards — flat 4-col grid, no borders */}
+                <div className="grid grid-cols-4 gap-6">
                   {[
-                    { label: 'Countries assessed', value: sResult.row_count, color: 'text-white' },
-                    { label: 'Robustly overlooked', value: sResult.meta.robust_count, color: 'text-purple-400',
+                    { label: 'Countries assessed', value: sResult.row_count },
+                    { label: 'Robustly overlooked', value: sResult.meta.robust_count,
                       sub: 'top quartile in all 4 rankings' },
-                    { label: '#1 most overlooked', value: rows[0]?.country_name ?? '—', color: 'text-red-400', small: true },
-                    { label: 'PC1+PC2 variance', color: 'text-blue-400',
+                    { label: '#1 most overlooked', value: rows[0]?.country_name ?? '—', small: true },
+                    { label: 'PC1+PC2 variance',
                       value: (Object.values(sResult.meta.pca_explained_var).slice(0,2).reduce((a,b)=>a+b,0)*100).toFixed(0)+'%' },
-                  ].map(c => (
-                    <div key={c.label} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                      <div className={`${c.small ? 'text-lg' : 'text-2xl'} font-bold ${c.color}`}>{c.value}</div>
-                      <div className="text-xs text-gray-500 mt-1">{c.label}</div>
-                      {c.sub && <div className="text-xs text-gray-700 mt-0.5">{c.sub}</div>}
+                  ].map((c, idx) => (
+                    <div key={c.label} className={`flex flex-col gap-2 ${idx > 0 ? 'border-l border-[color:var(--color-border)] pl-6' : ''}`}>
+                      <div className="text-[11px] font-medium uppercase tracking-[0.06em] text-[color:var(--color-fg-muted)]">{c.label}</div>
+                      <div className={`${c.small ? 'text-xl' : 'text-3xl'} font-semibold tabular-nums text-[color:var(--color-fg)] leading-none`}>{c.value}</div>
+                      {c.sub && <div className="text-xs text-[color:var(--color-fg-subtle)]">{c.sub}</div>}
                     </div>
                   ))}
                 </div>
 
                 {/* ── BUBBLE CHART ── */}
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="text-sm font-semibold text-white">Need vs. Funding Space</p>
-                    <span className="text-xs text-gray-600">bubble size = requirements · top-8 labelled</span>
+                <div className="border border-[color:var(--color-border)] rounded-lg p-6 bg-[color:var(--color-surface)]">
+                  <div className="flex items-baseline justify-between mb-1">
+                    <h2 className="text-[22px] font-semibold tracking-tight text-[color:var(--color-fg)] leading-tight">Need vs. Funding Space</h2>
+                    <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-[color:var(--color-fg-muted)]">bubble = requirements · top-8 labelled</span>
                   </div>
-                  <p className="text-xs text-gray-600 mb-4">
+                  <p className="text-sm text-[color:var(--color-fg-muted)] mb-6">
                     Crises in the top-left corner have the largest unmet need — high people in need, low funding coverage.
                   </p>
                   <ResponsiveContainer width="100%" height={380}>
-                    <ScatterChart margin={{ top: 20, right: 30, bottom: 40, left: 30 }}>
-                      <XAxis type="number" dataKey="x" domain={[0, 105]} tick={{ fill: '#6b7280', fontSize: 11 }}>
-                        <Label value="% Funded (coverage ratio)" position="insideBottom" offset={-25} fill="#6b7280" fontSize={11} />
+                    <ScatterChart margin={{ top: 20, right: 30, bottom: 40, left: 60 }}>
+                      <CartesianGrid strokeDasharray="2 4" stroke="#e4e4e7" strokeOpacity={0.8} />
+                      <XAxis type="number" dataKey="x" domain={[0, 105]}
+                        tick={{ fill: '#52525b', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}
+                        stroke="#d4d4d8" tickLine={{ stroke: '#d4d4d8' }}>
+                        <Label value="% Funded (coverage ratio)" position="insideBottom" offset={-25}
+                          style={{ fill: '#52525b', fontSize: 12, fontWeight: 500 }} />
                       </XAxis>
-                      <YAxis type="number" dataKey="y" domain={[-2, 2]} tick={{ fill: '#6b7280', fontSize: 11 }}
+                      <YAxis type="number" dataKey="y" domain={[-2, 2]}
+                        tick={{ fill: '#52525b', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}
+                        stroke="#d4d4d8" tickLine={{ stroke: '#d4d4d8' }}
                         tickFormatter={v => `${Math.pow(10,v).toFixed(1)}M`}>
-                        <Label value="People in Need (log scale)" angle={-90} position="insideLeft" fill="#6b7280" fontSize={11} offset={10} />
+                        <Label value="People in Need (log scale)" angle={-90} position="left" offset={40}
+                          style={{ fill: '#52525b', fontSize: 12, fontWeight: 500, textAnchor: 'middle' }} />
                       </YAxis>
                       <ZAxis type="number" dataKey="_z" range={[40, 900]} />
-                      <ReferenceLine x={30} stroke="#374151" strokeDasharray="4 4"
-                        label={{ value: '30% threshold', fill: '#4b5563', fontSize: 10, position: 'insideTopRight' }} />
-                      <ReTooltip content={<BubbleTooltip />} cursor={{ strokeDasharray: '3 3', stroke: '#374151' }} />
+                      <ReferenceLine x={30} stroke="#a1a1aa" strokeDasharray="4 4"
+                        label={{ value: '30% threshold', fill: '#52525b', fontSize: 11, fontFamily: 'JetBrains Mono, monospace', position: 'insideTopRight' }} />
+                      <ReTooltip content={<BubbleTooltip />} cursor={{ strokeDasharray: '3 3', stroke: '#a1a1aa' }} />
                       <Scatter data={bubbleData} shape={<BubbleDot />} />
                     </ScatterChart>
                   </ResponsiveContainer>
-                  <div className="flex items-center gap-6 mt-2 text-xs text-gray-600 justify-center">
-                    {[['Steel blue','low gap'],['Amber','medium gap'],['Red','high gap'],['Purple','robustly overlooked']].map(([c,l])=>(
-                      <span key={l} className="flex items-center gap-1.5">
-                        <span className="w-2.5 h-2.5 rounded-full inline-block" style={{background: c==='Steel blue'?'#3884c8':c==='Amber'?'#f97316':c==='Red'?'#dc2626':'#7c3aed'}}/>
-                        {l}
+                  {/* Legend */}
+                  <div className="flex items-center gap-6 mt-4 text-xs text-[color:var(--color-fg-muted)] justify-center">
+                    {[['#3884c8','low gap'],['#f97316','medium gap'],['#dc2626','high gap'],['#7c3aed','robustly overlooked']].map(([c,l])=>(
+                      <span key={l} className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-sm inline-block" style={{background: c}} />
+                        <span className="font-medium">{l}</span>
                       </span>
                     ))}
                   </div>
                 </div>
 
                 {/* ── WORLD MAP ── */}
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-                  <p className="text-sm font-semibold text-white mb-1">World Map — Overlooked Score {displayYear}</p>
-                  <p className="text-xs text-gray-600 mb-4">Hover over a country for details. Purple = robustly overlooked across all ranking methods.</p>
+                <div className="border border-[color:var(--color-border)] rounded-lg p-6 bg-[color:var(--color-surface)]">
+                  <h2 className="text-[22px] font-semibold tracking-tight text-[color:var(--color-fg)] leading-tight mb-1">World Map — Overlooked Score {displayYear}</h2>
+                  <p className="text-sm text-[color:var(--color-fg-muted)] mb-6">Hover over a country for details. Purple = robustly overlooked across all ranking methods.</p>
 
                   <div className="relative">
                     <ComposableMap projectionConfig={{ scale: 153 }} style={{ background: 'transparent' }}>
                       <Geographies geography={GEO_URL}>
                         {({ geographies }: { geographies: { rsmKey: string; properties: Record<string,unknown> }[] }) =>
                           geographies.map(geo => {
-                            const iso  = geo.properties.ISO_A3 as string
+                            const iso  = geoIso3(geo) ?? ''
                             const row  = sIsoMap[iso]
-                            const fill = row ? scoreToColor(row.overlooked_score, row.robust) : '#1f2937'
+                            const fill = row ? scoreToColor(row.overlooked_score, row.robust) : '#fafafa'
                             return (
                               <Geography
                                 key={geo.rsmKey} geography={geo}
-                                fill={fill} stroke="#111827" strokeWidth={0.4}
+                                fill={fill} stroke="#e4e4e7" strokeWidth={0.5}
                                 onMouseEnter={(e: MouseEvent) => {
                                   if (!row) return
                                   setHoveredCountry(row)
@@ -736,7 +833,7 @@ export default function App() {
                                 onMouseLeave={() => setHoveredCountry(null)}
                                 style={{
                                   default:  { outline: 'none' },
-                                  hover:    { fill: row ? '#60a5fa' : '#374151', outline: 'none', cursor: row ? 'pointer' : 'default' },
+                                  hover:    { fill: row ? '#0d9488' : '#f0fdfa', outline: 'none', cursor: row ? 'pointer' : 'default' },
                                   pressed:  { outline: 'none' },
                                 }}
                               />
@@ -750,143 +847,151 @@ export default function App() {
                   {/* Tooltip — fixed to viewport so it's never clipped */}
                   {hoveredCountry && (
                     <div
-                      className="pointer-events-none fixed z-50 bg-gray-950 border border-gray-700 rounded-xl p-3 shadow-2xl text-xs w-64"
+                      className="pointer-events-none fixed z-50 bg-white rounded-md p-3 text-xs w-64"
                       style={{
                         left: tooltipPos.x + 14,
                         top:  tooltipPos.y - 10,
                         transform: tooltipPos.x > window.innerWidth - 280 ? 'translateX(-110%)' : undefined,
+                        boxShadow: '0 4px 16px rgba(24, 24, 27, 0.12)',
                       }}
                     >
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="font-semibold text-sm text-white">{hoveredCountry.country_name}</span>
+                        <span className="font-semibold text-sm text-[color:var(--color-fg)]">{hoveredCountry.country_name}</span>
                         {hoveredCountry.robust && (
-                          <span className="bg-purple-900 text-purple-300 px-1.5 py-0.5 rounded text-xs">Robust</span>
+                          <span className="bg-[color:var(--color-accent-bg)] text-[color:var(--color-accent-hover)] px-1.5 py-0.5 rounded-sm text-[10px] font-medium uppercase tracking-wider">Robust</span>
                         )}
                       </div>
-                      <div className="space-y-1 text-gray-400">
+                      <div className="space-y-1 text-[color:var(--color-fg-muted)] font-mono tabular-nums">
                         <div className="flex justify-between">
                           <span>Overlooked score</span>
-                          <span className="font-mono" style={{ color: scoreToColor(hoveredCountry.overlooked_score, hoveredCountry.robust) }}>
+                          <span style={{ color: scoreToColor(hoveredCountry.overlooked_score, hoveredCountry.robust) }}>
                             {hoveredCountry.overlooked_score.toFixed(3)}
                           </span>
                         </div>
                         <div className="flex justify-between">
                           <span>Borda rank</span>
-                          <span className="text-white font-mono">#{hoveredCountry.borda_rank}</span>
+                          <span className="text-[color:var(--color-fg)]">#{hoveredCountry.borda_rank}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>People in need</span>
-                          <span className="text-orange-300">{millions(hoveredCountry.pin)}</span>
+                          <span className="text-[color:var(--color-fg)]">{millions(hoveredCountry.pin)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Funded</span>
-                          <span className="text-blue-300">{pct(hoveredCountry.coverage_ratio)}</span>
+                          <span className="text-[color:var(--color-fg)]">{pct(hoveredCountry.coverage_ratio)}</span>
                         </div>
                         {(hoveredCountry.years_underfunded ?? 0) > 0 && (
                           <div className="flex justify-between">
                             <span>Yrs &lt;30%</span>
-                            <span className="text-purple-300">{hoveredCountry.years_underfunded}/{hoveredCountry.n_coverage_years}</span>
+                            <span className="text-[color:var(--color-accent-hover)]">{hoveredCountry.years_underfunded}/{hoveredCountry.n_coverage_years}</span>
                           </div>
                         )}
                       </div>
-                      <div className="mt-2 pt-2 border-t border-gray-800 text-gray-500 leading-relaxed">
+                      <div className="mt-2 pt-2 border-t border-[color:var(--color-border)] text-[color:var(--color-fg-muted)] leading-relaxed">
                         {hoveredCountry.explanation}
                       </div>
                     </div>
                   )}
 
                   {/* Gradient legend */}
-                  <div className="flex items-center gap-3 mt-3 justify-center">
-                    <span className="text-xs text-gray-600">Low gap</span>
-                    <div className="h-2.5 w-48 rounded-full" style={{
+                  <div className="flex items-center gap-4 mt-5 justify-center flex-wrap text-xs text-[color:var(--color-fg-muted)]">
+                    <span className="font-medium">Low gap</span>
+                    <div className="h-2 w-48 rounded-full" style={{
                       background: 'linear-gradient(to right, #3884c8, #fb9216, #dc2626)'
                     }} />
-                    <span className="text-xs text-gray-600">High gap</span>
-                    <span className="text-xs text-gray-600 ml-4 flex items-center gap-1.5">
-                      <span className="w-3 h-3 rounded-sm inline-block bg-purple-600" /> Robustly overlooked
+                    <span className="font-medium">High gap</span>
+                    <span className="ml-4 flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#7c3aed' }} />
+                      <span className="font-medium">Robustly overlooked</span>
                     </span>
-                    <span className="text-xs text-gray-600 flex items-center gap-1.5">
-                      <span className="w-3 h-3 rounded-sm inline-block bg-gray-800" /> No crisis data
+                    <span className="flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-sm inline-block bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)]" />
+                      <span className="font-medium">No crisis data</span>
                     </span>
                   </div>
                 </div>
 
                 {/* ── PCA SCATTER ── */}
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-                  <p className="text-sm font-semibold text-white mb-1">Country Similarity Map (PCA)</p>
-                  <p className="text-xs text-gray-600 mb-4">
+                <div className="border border-[color:var(--color-border)] rounded-lg p-6 bg-[color:var(--color-surface)]">
+                  <h2 className="text-[22px] font-semibold tracking-tight text-[color:var(--color-fg)] leading-tight mb-1">Country Similarity Map (PCA)</h2>
+                  <p className="text-sm text-[color:var(--color-fg-muted)] mb-6">
                     Countries near each other share similar crisis profiles across all dimensions.
                     PC1 captures overall severity + gap · PC2 separates structural from acute neglect.
                   </p>
                   <ResponsiveContainer width="100%" height={320}>
-                    <ScatterChart margin={{ top: 10, right: 20, bottom: 30, left: 20 }}>
-                      <XAxis type="number" dataKey="pc1" tick={{ fill: '#4b5563', fontSize: 10 }}>
-                        <Label value="PC1 — severity + funding gap" position="insideBottom" offset={-20} fill="#4b5563" fontSize={10} />
+                    <ScatterChart margin={{ top: 10, right: 20, bottom: 30, left: 50 }}>
+                      <CartesianGrid strokeDasharray="2 4" stroke="#e4e4e7" strokeOpacity={0.8} />
+                      <XAxis type="number" dataKey="pc1"
+                        tick={{ fill: '#52525b', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}
+                        stroke="#d4d4d8" tickLine={{ stroke: '#d4d4d8' }}>
+                        <Label value="PC1 — severity + funding gap" position="insideBottom" offset={-20}
+                          style={{ fill: '#52525b', fontSize: 12, fontWeight: 500 }} />
                       </XAxis>
-                      <YAxis type="number" dataKey="pc2" tick={{ fill: '#4b5563', fontSize: 10 }}>
-                        <Label value="PC2 — structural vs acute" angle={-90} position="insideLeft" fill="#4b5563" fontSize={10} />
+                      <YAxis type="number" dataKey="pc2"
+                        tick={{ fill: '#52525b', fontSize: 11, fontFamily: 'JetBrains Mono, monospace' }}
+                        stroke="#d4d4d8" tickLine={{ stroke: '#d4d4d8' }}>
+                        <Label value="PC2 — structural vs acute" angle={-90} position="left" offset={30}
+                          style={{ fill: '#52525b', fontSize: 12, fontWeight: 500, textAnchor: 'middle' }} />
                       </YAxis>
                       <ZAxis range={[40, 40]} />
-                      <ReTooltip content={<PcaTooltip />} cursor={{ strokeDasharray: '3 3', stroke: '#374151' }} />
+                      <ReTooltip content={<PcaTooltip />} cursor={{ strokeDasharray: '3 3', stroke: '#a1a1aa' }} />
                       <Scatter data={rows} shape={<PcaDot />} />
                     </ScatterChart>
                   </ResponsiveContainer>
                 </div>
 
                 {/* ── RANKINGS TABLE ── */}
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-                  <div className="px-6 py-4 border-b border-gray-800">
-                    <p className="text-sm font-semibold text-white">Full Rankings — {displayYear}</p>
-                    <p className="text-xs text-gray-600 mt-0.5">
+                <div className="border border-[color:var(--color-border)] rounded-lg overflow-hidden bg-[color:var(--color-surface)]">
+                  <div className="px-6 py-5 border-b border-[color:var(--color-border)]">
+                    <h2 className="text-[22px] font-semibold tracking-tight text-[color:var(--color-fg)] leading-tight">Full Rankings — {displayYear}</h2>
+                    <p className="text-sm text-[color:var(--color-fg-muted)] mt-1">
                       Bar = gap component (colour) + structural bonus (purple). Borda validates across 4 independent methods.
                     </p>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead className="text-gray-500 text-xs uppercase border-b border-gray-800">
+                      <thead className="bg-[color:var(--color-surface-muted)] text-[11px] font-medium uppercase tracking-[0.06em] text-[color:var(--color-fg-muted)] border-b border-[color:var(--color-border)]">
                         <tr>
-                          <th className="px-4 py-3 text-left w-10">#</th>
-                          <th className="px-4 py-3 text-left">Country</th>
-                          <th className="px-4 py-3 text-left min-w-[160px]">Score</th>
-                          <th className="px-4 py-3 text-right">Borda</th>
-                          <th className="px-4 py-3 text-right">PIN</th>
-                          <th className="px-4 py-3 text-right">Funded</th>
-                          <th className="px-4 py-3 text-right">Yrs &lt;30%</th>
-                          <th className="px-4 py-3 text-left min-w-[280px]">Notes</th>
+                          <th className="px-4 py-2.5 text-left w-10">#</th>
+                          <th className="px-4 py-2.5 text-left">Country</th>
+                          <th className="px-4 py-2.5 text-left min-w-[160px]">Score</th>
+                          <th className="px-4 py-2.5 text-right">Borda</th>
+                          <th className="px-4 py-2.5 text-right">PIN</th>
+                          <th className="px-4 py-2.5 text-right">Funded</th>
+                          <th className="px-4 py-2.5 text-right">Yrs &lt;30%</th>
+                          <th className="px-4 py-2.5 text-left min-w-[280px]">Notes</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-800/60">
-                        {rows.map((r, i) => (
+                      <tbody>
+                        {rows.map((r) => (
                           <tr key={r.country_iso3}
-                            className={`transition-colors hover:bg-gray-800/50 ${
-                              r.robust ? 'bg-purple-950/20' : i < 3 ? 'bg-red-950/10' : ''}`}>
-                            <td className="px-4 py-3 font-mono text-xs text-gray-500">
-                              {i < 3
-                                ? <span className="text-base">{['🥇','🥈','🥉'][i]}</span>
-                                : r.rank}
+                            className={`transition-colors hover:bg-[color:var(--color-accent-bg)] border-b border-[color:var(--color-border)] last:border-b-0 ${
+ r.robust ? 'bg-[color:var(--color-accent-bg)]' : ''}`}>
+                            <td className="px-4 py-3 font-mono tabular-nums text-xs text-[color:var(--color-fg-muted)]">
+                              {r.rank}
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-gray-100 text-xs font-medium">{r.country_name}</span>
-                                {r.robust && <span className="text-xs bg-purple-900/70 text-purple-300 px-1.5 py-0.5 rounded-full">★ Robust</span>}
-                                {!r.data_complete && <span className="text-xs text-yellow-700 border border-yellow-900 px-1.5 py-0.5 rounded-full">Partial</span>}
+                                <span className="text-[color:var(--color-fg)] text-sm font-medium">{r.country_name}</span>
+                                {r.robust && <span className="text-[10px] font-medium uppercase tracking-wider bg-[color:var(--color-accent-bg)] text-[color:var(--color-accent-hover)] px-1.5 py-0.5 rounded-sm">Robust</span>}
+                                {!r.data_complete && <span className="text-[10px] font-medium uppercase tracking-wider border border-[color:var(--color-border-strong)] text-[color:var(--color-fg-muted)] px-1.5 py-0.5 rounded-sm">Partial</span>}
                               </div>
-                              <div className="text-xs text-gray-600 mt-0.5">{r.region_name}</div>
+                              <div className="text-xs text-[color:var(--color-fg-subtle)] mt-0.5">{r.region_name}</div>
                             </td>
                             <td className="px-4 py-3">
                               <ScoreBar row={r} maxScore={maxScore} />
                             </td>
-                            <td className="px-4 py-3 text-right font-mono text-xs text-gray-400">#{r.borda_rank}</td>
-                            <td className="px-4 py-3 text-right font-mono text-xs text-gray-300">{millions(r.pin)}</td>
-                            <td className="px-4 py-3 text-right font-mono text-xs">
-                              <span style={{ color: r.coverage_ratio != null ? scoreToColor(1 - r.coverage_ratio) : '#6b7280' }}>
+                            <td className="px-4 py-3 text-right font-mono tabular-nums text-xs text-[color:var(--color-fg-muted)]">#{r.borda_rank}</td>
+                            <td className="px-4 py-3 text-right font-mono tabular-nums text-xs text-[color:var(--color-fg)]">{millions(r.pin)}</td>
+                            <td className="px-4 py-3 text-right font-mono tabular-nums text-xs">
+                              <span style={{ color: r.coverage_ratio != null ? scoreToColor(1 - r.coverage_ratio) : '#a1a1aa' }}>
                                 {pct(r.coverage_ratio)}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-right font-mono text-xs text-gray-400">
+                            <td className="px-4 py-3 text-right font-mono tabular-nums text-xs text-[color:var(--color-fg-muted)]">
                               {r.years_underfunded != null ? `${r.years_underfunded}/${r.n_coverage_years}` : '—'}
                             </td>
-                            <td className="px-4 py-3 text-xs text-gray-500 leading-relaxed max-w-xs">{r.explanation}</td>
+                            <td className="px-4 py-3 text-xs text-[color:var(--color-fg-muted)] leading-relaxed max-w-xs">{r.explanation}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -930,13 +1035,13 @@ export default function App() {
 
           const thSort = (key: string, label: string) => (
             <th key={key}
-              className="px-3 py-2.5 text-right cursor-pointer select-none hover:text-gray-300 transition-colors font-normal"
+              className="px-3 py-2.5 text-right cursor-pointer select-none hover:text-[color:var(--color-fg)] transition-colors font-normal"
               onClick={() => {
                 if (aSortBy === key) setASortDir(d => (d === 1 ? -1 : 1) as 1|-1)
                 else { setASortBy(key); setASortDir(-1) }
               }}>
               {label.split(' ').slice(0,2).join('\u00a0')}
-              <span className="ml-0.5 text-gray-600">{aSortBy === key ? (aSortDir === -1 ? '↓' : '↑') : '↕'}</span>
+              <span className="ml-0.5 text-[color:var(--color-fg-subtle)]">{aSortBy === key ? (aSortDir === -1 ? '↓' : '↑') : '↕'}</span>
             </th>
           )
 
@@ -944,96 +1049,82 @@ export default function App() {
           <div className="flex flex-col gap-5 max-w-5xl mx-auto w-full">
 
             {/* ── Prompt card ─────────────────────────────────────────────── */}
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 flex flex-col gap-4">
+            <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg p-5 flex flex-col gap-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[color:var(--color-fg-muted)]">Describe your mandate</p>
               <form onSubmit={handleAnalyze} className="flex gap-3 items-start">
                 <textarea
-                  className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none text-sm leading-relaxed"
+                  className="flex-1 bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] rounded-lg px-4 py-3 text-[color:var(--color-fg)] placeholder:text-[color:var(--color-fg-subtle)] focus:outline-none focus:border-[color:var(--color-accent)] resize-none text-sm leading-relaxed"
                   rows={2}
-                  placeholder='Describe your mandate — e.g. "We focus on water scarcity in arid regions with chronic underfunding"'
+                  placeholder={typewriter}
                   value={aPrompt}
                   onChange={e => setAPrompt(e.target.value)}
                 />
-                <div className="flex flex-col gap-2 shrink-0">
-                  <div className="flex gap-2">
-                    <select className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-sm flex-1"
-                      value={aYear} onChange={e => setAYear(Number(e.target.value))}>
-                      {YEARS.map(y => <option key={y}>{y}</option>)}
-                    </select>
-                    <select className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-sm flex-1"
-                      value={aSector} onChange={e => setASector(e.target.value)}>
-                      {SECTOR_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                    </select>
-                  </div>
+                <div className="flex flex-col gap-2 shrink-0 min-w-[220px]">
+                  <select className="bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] rounded-lg px-3 py-2 text-[color:var(--color-fg)] text-sm"
+                    value={aSector} onChange={e => setASector(e.target.value)}>
+                    {SECTOR_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
                   <input
-                    className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 text-sm placeholder-gray-600 focus:outline-none focus:border-blue-500"
+                    className="bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] rounded-lg px-3 py-2 text-[color:var(--color-fg)] text-sm placeholder:text-[color:var(--color-fg-subtle)] focus:outline-none focus:border-[color:var(--color-accent)]"
                     placeholder="Focus country, e.g. Brazil or BRA (optional)"
                     value={aFocusRaw}
                     onChange={e => setAFocusRaw(e.target.value)}
                   />
                   <button type="submit" disabled={aLoading || !aPrompt.trim()}
-                    className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+                    className="bg-[color:var(--color-accent)] hover:bg-[color:var(--color-accent-hover)] disabled:bg-[color:var(--color-border)] disabled:text-[color:var(--color-fg-subtle)] disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
                     {aLoading ? '…' : 'Analyze →'}
                   </button>
                 </div>
               </form>
 
-              {/* Example chips */}
-              <div className="flex flex-wrap gap-2">
-                {[
-                  "Water scarcity in chronically neglected conflict zones",
-                  "Food insecurity at massive scale regardless of funding trend",
-                  "Structural neglect and governance fragility",
-                  "Climate-vulnerable displacement crises",
-                ].map(ex => (
-                  <button key={ex} onClick={() => setAPrompt(ex)}
-                    className="text-xs text-gray-500 bg-gray-800/60 border border-gray-700 hover:border-gray-500 hover:text-gray-300 px-3 py-1 rounded-full transition-colors">
-                    {ex}
-                  </button>
-                ))}
-              </div>
             </div>
 
-            {aError && <div className="bg-red-950 border border-red-800 text-red-300 rounded-xl px-4 py-3 text-sm">{aError}</div>}
-            {aLoading && <div className="flex items-center justify-center py-16 text-gray-600 text-sm">Scoring all countries against your priorities…</div>}
+            {aError && <div className="bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] text-[color:var(--color-fg)] rounded-lg px-4 py-3 text-sm">{aError}</div>}
+            {aLoading && <div className="flex items-center justify-center py-16 text-[color:var(--color-fg-subtle)] text-sm">Scoring all countries against your priorities…</div>}
 
             {aResult && (
               <>
                 {/* ── Priority tags + refine ───────────────────────────── */}
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+                <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg p-5">
                   <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">How I understood your priorities</p>
-                    <span className="text-xs text-gray-600 font-mono">score = Σ(weight × dim) &nbsp;·&nbsp; weight = imp²/Σ(imp²)</span>
+                    <p className="text-xs text-[color:var(--color-fg-muted)] uppercase tracking-wide font-medium">How I understood your priorities</p>
+                    <span className="text-xs text-[color:var(--color-fg-subtle)] font-mono">score = Σ(weight × dim) &nbsp;·&nbsp; weight = imp²/Σ(imp²)</span>
                   </div>
-                  <div className="flex flex-wrap gap-2 mb-4">
-                    {Object.entries(aResult.importance_scores)
-                      .sort((a, b) => b[1] - a[1])
-                      .map(([k, s]) => {
-                        const color = s >= 8 ? 'bg-red-900/60 border-red-800 text-red-300'
-                          : s >= 6 ? 'bg-orange-900/50 border-orange-800 text-orange-300'
-                          : s >= 4 ? 'bg-blue-900/40 border-blue-800 text-blue-300'
-                          : 'bg-gray-800 border-gray-700 text-gray-500'
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-4 mb-4">
+                    {(dimOrder.length > 0 ? dimOrder : Object.keys(aResult.importance_scores))
+                      .filter(k => k in aResult.importance_scores)
+                      .map(k => {
+                        const s = aResult.importance_scores[k]
                         const meta = DIM_META[k]
+                        const local = pendingScores[k] ?? s
+                        const color = DIM_COLORS[k] ?? '#a1a1aa'
                         return (
-                          <span key={k}
-                            title={meta ? `${meta.label} — ${meta.desc}\nSource: ${meta.source}` : k}
-                            className={`inline-flex items-center gap-1 pl-2.5 pr-1 py-0.5 rounded-full border text-xs font-medium cursor-help ${color}`}>
-                            {dimLabel(k)}
-                            <span className="font-mono font-bold mx-1">{s}/10</span>
-                            <span className="inline-flex gap-0.5">
-                              <button
-                                disabled={aLoading || s >= 10}
-                                onClick={() => handleAdjustScore(k, 1)}
-                                className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-white/10 disabled:opacity-30 transition-colors font-bold leading-none">
-                                +
-                              </button>
-                              <button
-                                disabled={aLoading || s <= 1}
-                                onClick={() => handleAdjustScore(k, -1)}
-                                className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-white/10 disabled:opacity-30 transition-colors font-bold leading-none">
-                                −
-                              </button>
-                            </span>
-                          </span>
+                          <div key={k} className="flex flex-col gap-1"
+                            title={meta ? `${meta.label} — ${meta.desc}\nSource: ${meta.source}` : k}>
+                            <div className="flex items-baseline justify-between">
+                              <span className="text-xs font-medium text-[color:var(--color-fg)] flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full inline-block" style={{ background: color }} />
+                                {dimLabel(k)}
+                              </span>
+                              <span className="text-xs font-mono tabular-nums text-[color:var(--color-fg-muted)]">{local}/10</span>
+                            </div>
+                            <input
+                              type="range"
+                              min={0}
+                              max={10}
+                              step={1}
+                              value={local}
+                              disabled={aLoading}
+                              onChange={e => setPendingScores(p => ({ ...p, [k]: Number(e.target.value) }))}
+                              onPointerUp={() => { if (local !== s) handleAdjustScore(k, local - s) }}
+                              onKeyUp={e => { if (e.key === 'Enter' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') { if (local !== s) handleAdjustScore(k, local - s) } }}
+                              className="dim-slider"
+                              style={{
+                                ['--slider-color' as string]: color,
+                                background: `linear-gradient(to right, ${color} 0%, ${color} ${local * 10}%, var(--color-border) ${local * 10}%, var(--color-border) 100%)`,
+                              }}
+                            />
+                          </div>
                         )
                       })}
                   </div>
@@ -1043,33 +1134,33 @@ export default function App() {
                     const sorted = Object.entries(aResult.weights).sort((a, b) => b[1] - a[1])
                     const total = sorted.reduce((s, [, w]) => s + w, 0) || 1
                     return (
-                      <div className="mb-4 p-3 bg-gray-800/40 rounded-xl">
+                      <div className="mb-4 p-3 bg-[color:var(--color-surface-muted)] rounded-lg">
                         <div className="flex items-center justify-between mb-2">
-                          <p className="text-xs text-gray-600">How weight distributes across your 12 dimensions</p>
-                          <p className="text-xs text-gray-700 font-mono">weight = imp² / Σ(imp²)</p>
+                          <p className="text-xs text-[color:var(--color-fg-subtle)]">How weight distributes across your 12 dimensions</p>
+                          <p className="text-xs text-[color:var(--color-fg-subtle)] font-mono">weight = imp² / Σ(imp²)</p>
                         </div>
                         <div className="flex h-3 rounded-full overflow-hidden gap-px mb-2">
                           {sorted.map(([k, w]) => (
                             <div key={k}
                               title={`${DIM_META[k]?.label ?? k}: ${(w / total * 100).toFixed(1)}% weight\n${DIM_META[k]?.desc ?? ''}`}
-                              style={{ width: `${w / total * 100}%`, background: DIM_COLORS[k] ?? '#6b7280', minWidth: 1 }} />
+                              style={{ width: `${w / total * 100}%`, background: DIM_COLORS[k] ?? '#a1a1aa', minWidth: 1 }} />
                           ))}
                         </div>
                         <div className="flex flex-wrap gap-x-3 gap-y-0.5 mb-2">
                           {sorted.filter(([, w]) => w / total >= 0.04).map(([k, w]) => (
-                            <span key={k} className="text-xs text-gray-500 flex items-center gap-1"
+                            <span key={k} className="text-xs text-[color:var(--color-fg-muted)] flex items-center gap-1"
                               title={DIM_META[k]?.desc}>
                               <span className="w-2 h-2 rounded-sm shrink-0 inline-block"
-                                style={{ background: DIM_COLORS[k] ?? '#6b7280' }} />
-                              {dimLabel(k)} <span className="font-mono text-gray-600">{(w / total * 100).toFixed(0)}%</span>
+                                style={{ background: DIM_COLORS[k] ?? '#a1a1aa' }} />
+                              {dimLabel(k)} <span className="font-mono text-[color:var(--color-fg-subtle)]">{(w / total * 100).toFixed(0)}%</span>
                             </span>
                           ))}
                         </div>
                         {/* Math explainer */}
-                        <div className="border-t border-gray-700/50 pt-2 mt-1 text-xs text-gray-700 leading-relaxed space-y-0.5">
-                          <p><span className="text-gray-500 font-medium">Importance (1–10)</span> — your stated priority. Squaring before normalising means a score of 10 carries <span className="font-mono text-gray-500">10²=100</span> times the weight of a score of 1, so your top picks truly dominate.</p>
-                          <p><span className="text-gray-500 font-medium">Dimension score (0–1)</span> — each country's raw value, where 1 = most critical globally on that metric.</p>
-                          <p><span className="text-gray-500 font-medium">Contribution</span> = weight × dimension score. The final MCDA score is the sum of all contributions.</p>
+                        <div className="border-t border-[color:var(--color-border)]/50 pt-2 mt-1 text-xs text-[color:var(--color-fg-subtle)] leading-relaxed space-y-0.5">
+                          <p><span className="text-[color:var(--color-fg-muted)] font-medium">Importance (1–10)</span> — your stated priority. Squaring before normalising means a score of 10 carries <span className="font-mono text-[color:var(--color-fg-muted)]">10²=100</span> times the weight of a score of 1, so your top picks truly dominate.</p>
+                          <p><span className="text-[color:var(--color-fg-muted)] font-medium">Dimension score (0–1)</span> — each country's raw value, where 1 = most critical globally on that metric.</p>
+                          <p><span className="text-[color:var(--color-fg-muted)] font-medium">Contribution</span> = weight × dimension score. The final MCDA score is the sum of all contributions.</p>
                         </div>
                       </div>
                     )
@@ -1078,34 +1169,34 @@ export default function App() {
                   {/* ── Dimension glossary ─────────────────────────────── */}
                   <div className="mb-3">
                     <button onClick={() => setShowGlossary(v => !v)}
-                      className="text-xs text-gray-600 hover:text-gray-400 flex items-center gap-1 transition-colors">
+                      className="text-xs text-[color:var(--color-fg-subtle)] hover:text-[color:var(--color-fg-muted)] flex items-center gap-1 transition-colors">
                       <span>{showGlossary ? '▾' : '▸'}</span>
                       What do these 12 metrics measure?
                     </button>
                     {showGlossary && (
-                      <div className="mt-2 rounded-xl overflow-hidden border border-gray-800">
+                      <div className="mt-2 rounded-lg overflow-hidden border border-[color:var(--color-border)]">
                         <table className="w-full text-xs">
-                          <thead className="bg-gray-800/60">
+                          <thead className="bg-[color:var(--color-surface-muted)]">
                             <tr>
-                              <th className="px-3 py-2 text-left text-gray-500 font-medium w-8"></th>
-                              <th className="px-3 py-2 text-left text-gray-500 font-medium">Metric</th>
-                              <th className="px-3 py-2 text-left text-gray-500 font-medium">What it measures</th>
-                              <th className="px-3 py-2 text-left text-gray-500 font-medium hidden sm:table-cell">Source</th>
+                              <th className="px-3 py-2 text-left text-[color:var(--color-fg-muted)] font-medium w-8"></th>
+                              <th className="px-3 py-2 text-left text-[color:var(--color-fg-muted)] font-medium">Metric</th>
+                              <th className="px-3 py-2 text-left text-[color:var(--color-fg-muted)] font-medium">What it measures</th>
+                              <th className="px-3 py-2 text-left text-[color:var(--color-fg-muted)] font-medium hidden sm:table-cell">Source</th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-gray-800/60">
+                          <tbody className="divide-y divide-[color:var(--color-border)]">
                             {Object.entries(DIM_META).map(([k, m]) => (
-                              <tr key={k} className="hover:bg-gray-800/30">
+                              <tr key={k} className="hover:bg-[color:var(--color-surface-muted)]/30">
                                 <td className="px-3 py-2">
                                   <span className="w-2.5 h-2.5 rounded-sm inline-block"
-                                    style={{ background: DIM_COLORS[k] ?? '#6b7280' }} />
+                                    style={{ background: DIM_COLORS[k] ?? '#a1a1aa' }} />
                                 </td>
                                 <td className="px-3 py-2">
-                                  <div className="font-medium text-gray-300">{m.label}</div>
-                                  <div className="text-gray-600">{m.group}</div>
+                                  <div className="font-medium text-[color:var(--color-fg)]">{m.label}</div>
+                                  <div className="text-[color:var(--color-fg-subtle)]">{m.group}</div>
                                 </td>
-                                <td className="px-3 py-2 text-gray-500 leading-relaxed max-w-xs">{m.desc}</td>
-                                <td className="px-3 py-2 text-gray-700 hidden sm:table-cell">{m.source}</td>
+                                <td className="px-3 py-2 text-[color:var(--color-fg-muted)] leading-relaxed max-w-xs">{m.desc}</td>
+                                <td className="px-3 py-2 text-[color:var(--color-fg-subtle)] hidden sm:table-cell">{m.source}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -1116,13 +1207,13 @@ export default function App() {
 
                   <form onSubmit={handleRefine} className="flex gap-2">
                     <input
-                      className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-blue-500"
+                      className="flex-1 bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] rounded-lg px-3 py-2 text-sm text-[color:var(--color-fg)] placeholder:text-[color:var(--color-fg-subtle)] focus:outline-none focus:border-[color:var(--color-accent)]"
                       placeholder="Not right? Refine: e.g. make water more important, I don't care about governance"
                       value={aRefine}
                       onChange={e => setARefine(e.target.value)}
                     />
                     <button type="submit" disabled={aLoading || !aRefine.trim()}
-                      className="bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-gray-200 px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">
+                      className="bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-[color:var(--color-fg)] px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">
                       {aLoading ? '…' : 'Refine ↩'}
                     </button>
                   </form>
@@ -1131,14 +1222,14 @@ export default function App() {
                 {/* ── Inverse query + compare controls ─────────────────── */}
                 <div className="flex gap-3 items-center">
                   <input
-                    className="flex-1 bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-blue-600"
+                    className="flex-1 bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg px-3 py-2 text-sm text-[color:var(--color-fg)] placeholder:text-[color:var(--color-fg-subtle)] focus:outline-none focus:border-[color:var(--color-accent)]"
                     placeholder="Find a country — type name or ISO3 to see where it ranks…"
                     value={aSearch}
                     onChange={e => setASearch(e.target.value)}
                   />
                   {aCompare.size > 0 && (
                     <button onClick={() => setACompare(new Set())}
-                      className="text-xs text-gray-500 hover:text-gray-300 border border-gray-700 rounded-lg px-3 py-2 whitespace-nowrap">
+                      className="text-xs text-[color:var(--color-fg-muted)] hover:text-[color:var(--color-fg)] border border-[color:var(--color-border)] rounded-lg px-3 py-2 whitespace-nowrap">
                       Clear compare ({aCompare.size})
                     </button>
                   )}
@@ -1156,19 +1247,19 @@ export default function App() {
                     ([iso]) => iso.toUpperCase().includes(q)
                   )
                   if (!match) return (
-                    <div className="text-xs text-gray-600 px-1">No country found matching "{aSearch}".</div>
+                    <div className="text-xs text-[color:var(--color-fg-subtle)] px-1">No country found matching "{aSearch}".</div>
                   )
                   const [iso, rank] = match
                   const name = aResult.ranked.find(r => r.country_iso3 === iso)?.country_name ?? iso
                   return (
-                    <div className="bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm flex items-center justify-between">
-                      <span className="text-gray-300">
-                        <span className="font-semibold text-white">{name}</span> ranks
-                        <span className="font-mono text-amber-400 mx-1">#{rank}</span>
+                    <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg px-4 py-3 text-sm flex items-center justify-between">
+                      <span className="text-[color:var(--color-fg)]">
+                        <span className="font-semibold text-[color:var(--color-fg)]">{name}</span> ranks
+                        <span className="font-mono text-[color:var(--color-fg-muted)] mx-1">#{rank}</span>
                         overall — outside the top 20 for your current priorities.
                       </span>
                       <button onClick={() => handleFocusCountry(iso)}
-                        className="text-xs text-blue-400 hover:text-blue-300 ml-4 whitespace-nowrap">
+                        className="text-xs text-[color:var(--color-accent)] hover:text-[color:var(--color-accent)] ml-4 whitespace-nowrap">
                         Analyze anyway →
                       </button>
                     </div>
@@ -1185,13 +1276,13 @@ export default function App() {
                   if (!proConError && !notResolved) return null
                   const label = aFocusRaw.trim()
                   return (
-                    <div className="bg-gray-900 border border-amber-900/60 rounded-2xl px-5 py-4 flex items-start gap-3">
-                      <span className="text-amber-500 text-lg shrink-0">⚠</span>
+                    <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg px-5 py-4 flex items-start gap-3">
+                      <span className="text-[color:var(--color-fg-muted)] text-lg shrink-0">⚠</span>
                       <div>
-                        <p className="text-sm font-semibold text-amber-300 mb-1">
+                        <p className="text-sm font-semibold text-[color:var(--color-fg)] mb-1">
                           "{label}" is not in the crisis dataset
                         </p>
-                        <p className="text-xs text-gray-400 leading-relaxed">
+                        <p className="text-xs text-[color:var(--color-fg-muted)] leading-relaxed">
                           {proConError
                             ? proConError
                             : `Could not match "${label}" to a country with active OCHA/FTS data.`}
@@ -1199,7 +1290,7 @@ export default function App() {
                           Countries without an active humanitarian response plan (e.g. middle-income countries, non-crisis contexts)
                           are not included.
                         </p>
-                        <p className="text-xs text-gray-600 mt-1.5">
+                        <p className="text-xs text-[color:var(--color-fg-subtle)] mt-1.5">
                           Try searching the ranked list or use the find-a-country bar above to see which countries are covered.
                         </p>
                       </div>
@@ -1222,10 +1313,10 @@ export default function App() {
                   // Verdict: based on rank percentile among all scored countries
                   const rankPct = pc.mcda_rank / pc.n_countries
                   const verdict = rankPct <= 0.15
-                    ? { label: 'Strong case', color: 'bg-green-900/60 border-green-700 text-green-300', dot: 'bg-green-400' }
+                    ? { label: 'Strong case', color: 'bg-[color:var(--color-accent-bg)] border-[color:var(--color-accent)] text-[color:var(--color-accent-hover)]', dot: 'bg-[color:var(--color-accent)]' }
                     : rankPct <= 0.40
-                    ? { label: 'Mixed case', color: 'bg-amber-900/50 border-amber-700 text-amber-300', dot: 'bg-amber-400' }
-                    : { label: 'Weak case', color: 'bg-red-900/50 border-red-800 text-red-300', dot: 'bg-red-500' }
+                    ? { label: 'Mixed case', color: 'bg-amber-900/50 border-amber-700 text-[color:var(--color-fg)]', dot: 'bg-[color:var(--color-fg-muted)]' }
+                    : { label: 'Weak case', color: 'bg-[color:var(--color-surface-muted)] border-[color:var(--color-border-strong)] text-[color:var(--color-fg)]', dot: 'bg-[color:var(--color-fg-muted)]' }
 
                   // Better alternatives: ranked countries above this one (already in top-N list)
                   const betterAlts = aResult.ranked
@@ -1234,13 +1325,13 @@ export default function App() {
                     .slice(0, 3)
 
                   return (
-                    <div className="bg-gray-900 border border-blue-800 rounded-2xl overflow-hidden">
+                    <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg overflow-hidden">
                       {/* Header */}
-                      <div className="px-5 py-3 border-b border-blue-900/50 flex items-center justify-between bg-blue-950/20">
+                      <div className="px-5 py-3 border-b border-[color:var(--color-border)] flex items-center justify-between bg-[color:var(--color-surface-muted)]">
                         <div className="flex items-center gap-3 flex-wrap">
-                          <span className="text-sm font-semibold text-white">{pc.country_name}</span>
-                          <span className="text-xs text-gray-400">{pc.continent} · {pc.region_name}</span>
-                          <span className="font-mono text-xs bg-gray-800 px-2 py-0.5 rounded text-gray-300">
+                          <span className="text-sm font-semibold text-[color:var(--color-fg)]">{pc.country_name}</span>
+                          <span className="text-xs text-[color:var(--color-fg-muted)]">{pc.continent} · {pc.region_name}</span>
+                          <span className="font-mono text-xs bg-[color:var(--color-surface-muted)] px-2 py-0.5 rounded text-[color:var(--color-fg)]">
                             #{pc.mcda_rank} of {pc.n_countries}
                           </span>
                           <span className="font-mono text-xs font-bold" style={{ color: scoreToColor(pc.mcda_score) }}>
@@ -1253,7 +1344,7 @@ export default function App() {
                           </span>
                         </div>
                         <button onClick={() => { setACountry(''); setAFocusRaw('') }}
-                          className="text-xs text-gray-600 hover:text-gray-400 shrink-0">✕ clear</button>
+                          className="text-xs text-[color:var(--color-fg-subtle)] hover:text-[color:var(--color-fg-muted)] shrink-0">✕ clear</button>
                       </div>
 
                       <div className="p-5 flex flex-col gap-5">
@@ -1261,133 +1352,165 @@ export default function App() {
                         {/* Key metrics row */}
                         <div className="grid grid-cols-4 gap-2">
                           {[
-                            { l: 'People in need', v: millions(pc.pin), c: 'text-orange-300' },
-                            { l: 'Funded', v: pct(pc.coverage_ratio), c: 'text-blue-300' },
-                            { l: 'Requirements', v: `$${millions(pc.requirements_usd)}`, c: 'text-gray-300' },
-                            { l: 'Yrs underfunded', v: pc.years_underfunded != null ? String(pc.years_underfunded) : '—', c: 'text-purple-300' },
+                            { l: 'People in need', v: millions(pc.pin), c: 'text-[color:var(--color-fg)]' },
+                            { l: 'Funded', v: pct(pc.coverage_ratio), c: 'text-[color:var(--color-accent)]' },
+                            { l: 'Requirements', v: `$${millions(pc.requirements_usd)}`, c: 'text-[color:var(--color-fg)]' },
+                            { l: 'Yrs underfunded', v: pc.years_underfunded != null ? String(pc.years_underfunded) : '—', c: 'text-[color:var(--color-accent-hover)]' },
                           ].map(m => (
-                            <div key={m.l} className="bg-gray-800 rounded-lg p-2.5 text-center">
+                            <div key={m.l} className="bg-[color:var(--color-surface-muted)] rounded-lg p-2.5 text-center">
                               <div className={`text-sm font-bold ${m.c}`}>{m.v}</div>
-                              <div className="text-xs text-gray-600 mt-0.5">{m.l}</div>
+                              <div className="text-xs text-[color:var(--color-fg-subtle)] mt-0.5">{m.l}</div>
                             </div>
                           ))}
                         </div>
 
                         {/* Why fund / Why not — split LLM narrative */}
                         <div className="grid grid-cols-2 gap-3">
-                          <div className="bg-green-950/20 border border-green-900/40 rounded-xl p-4">
-                            <p className="text-xs font-bold text-green-400 mb-2 flex items-center gap-1.5">
+                          <div className="bg-[color:var(--color-accent-bg)]/20 border border-[color:var(--color-accent)]/40 rounded-lg p-4">
+                            <p className="text-xs font-bold text-[color:var(--color-accent)] mb-2 flex items-center gap-1.5">
                               <span>✓</span> Why you should fund {pc.country_name}
                             </p>
-                            <p className="text-xs text-gray-300 leading-relaxed">{pc.why_fund}</p>
+                            <p className="text-xs text-[color:var(--color-fg)] leading-relaxed">{pc.why_fund}</p>
                           </div>
-                          <div className="bg-red-950/20 border border-red-900/40 rounded-xl p-4">
-                            <p className="text-xs font-bold text-red-400 mb-2 flex items-center gap-1.5">
+                          <div className="bg-[color:var(--color-surface-muted)]/20 border border-red-900/40 rounded-lg p-4">
+                            <p className="text-xs font-bold text-[color:var(--color-fg)] mb-2 flex items-center gap-1.5">
                               <span>✗</span> Why you might not
                             </p>
-                            <p className="text-xs text-gray-300 leading-relaxed">{pc.why_not}</p>
+                            <p className="text-xs text-[color:var(--color-fg)] leading-relaxed">{pc.why_not}</p>
                           </div>
                         </div>
 
                         {/* Better alternatives (when weak/mixed case and we have ranked alternatives) */}
                         {betterAlts.length > 0 && rankPct > 0.15 && (
-                          <div className="bg-gray-800/40 rounded-xl px-4 py-3 flex items-center gap-3 flex-wrap">
-                            <span className="text-xs text-gray-500 shrink-0">
+                          <div className="bg-[color:var(--color-surface-muted)] rounded-lg px-4 py-3 flex items-center gap-3 flex-wrap">
+                            <span className="text-xs text-[color:var(--color-fg-muted)] shrink-0">
                               Stronger alternatives for your mandate:
                             </span>
                             {betterAlts.map(r => (
                               <button key={r.country_iso3}
                                 onClick={() => handleFocusCountry(r.country_iso3)}
-                                className="text-xs bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded-lg px-3 py-1.5 text-gray-200 transition-colors flex items-center gap-1.5">
-                                <span className="font-mono text-gray-500">#{r.mcda_rank}</span>
+                                className="text-xs bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded-lg px-3 py-1.5 text-[color:var(--color-fg)] transition-colors flex items-center gap-1.5">
+                                <span className="font-mono text-[color:var(--color-fg-muted)]">#{r.mcda_rank}</span>
                                 {r.country_name}
                               </button>
                             ))}
                           </div>
                         )}
 
-                        {/* Dimension-level detail (collapsible feel via border-top section) */}
-                        <div className="pt-3 border-t border-gray-800/60">
-                          <p className="text-xs text-gray-500 font-medium mb-3">Dimension detail</p>
-                          <div className="grid grid-cols-2 gap-3 mb-4">
-                            <div>
-                              <p className="text-xs text-green-500 mb-1.5">Strengths on your criteria</p>
-                              {pc.pros.length === 0
-                                ? <p className="text-xs text-gray-600 italic">No strong signals.</p>
-                                : pc.pros.slice(0, 4).map(c => (
-                                  <div key={c.dimension} className="mb-2">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="text-green-600 shrink-0 text-xs">▲</span>
-                                      <span className="text-xs font-medium text-green-400">{c.label}</span>
-                                      <span className="text-xs text-gray-700 ml-auto">top {Math.round((1 - c.percentile) * 100)}%</span>
-                                    </div>
-                                    <p className="text-xs text-gray-500 leading-relaxed pl-3 mt-0.5">{c.narrative}</p>
-                                  </div>
-                                ))}
+                        {/* ═══ DIMENSION DETAIL — strengths / weaknesses ═══ */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+                          {/* ── STRENGTHS — teal left edge, up-arrow rows ───── */}
+                          <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg overflow-hidden" style={{ borderLeft: '4px solid var(--color-accent)' }}>
+                            <div className="px-4 py-2.5 border-b border-[color:var(--color-border)] flex items-baseline justify-between bg-[color:var(--color-accent-bg)]">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[color:var(--color-accent-hover)]">Strengths on your criteria</p>
+                              <p className="text-[11px] text-[color:var(--color-fg-subtle)] font-mono">{pc.pros.length} dims</p>
                             </div>
-                            <div>
-                              <p className="text-xs text-amber-600 mb-1.5">Weaknesses on your criteria</p>
-                              {pc.cons.length === 0
-                                ? <p className="text-xs text-gray-600 italic">No significant signals.</p>
-                                : pc.cons.slice(0, 4).map(c => (
-                                  <div key={c.dimension} className="mb-2">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="text-amber-700 shrink-0 text-xs">▼</span>
-                                      <span className="text-xs font-medium text-amber-500">{c.label}</span>
-                                      <span className="text-xs text-gray-700 ml-auto">btm {Math.round(c.percentile * 100)}%</span>
-                                    </div>
-                                    <p className="text-xs text-gray-500 leading-relaxed pl-3 mt-0.5">{c.narrative}</p>
-                                    {c.better_country && (
-                                      <p className="text-xs text-gray-700 pl-3 mt-0.5">
-                                        {c.better_country.country_name} outperforms
-                                        {c.better_country.value != null && c.value != null
-                                          ? ` (${(c.better_country.value * 10).toFixed(1)} vs ${(c.value * 10).toFixed(1)})`
-                                          : ''}.
-                                      </p>
-                                    )}
-                                  </div>
-                                ))}
-                            </div>
+                            {pc.pros.length === 0 ? (
+                              <p className="px-4 py-4 text-xs text-[color:var(--color-fg-subtle)] italic">No strong signals on your weighted dimensions.</p>
+                            ) : (
+                              <ul className="divide-y divide-[color:var(--color-border)]">
+                                {[...pc.pros]
+                                  .sort((a, b) => (b.weight * (b.value ?? 0)) - (a.weight * (a.value ?? 0)))
+                                  .slice(0, 4)
+                                  .map(c => (
+                                    <li key={c.dimension} className="px-4 py-3">
+                                      <div className="flex items-center gap-2">
+                                        <span className="shrink-0 text-sm leading-none text-[color:var(--color-accent)]">▲</span>
+                                        <span className="text-sm font-semibold text-[color:var(--color-fg)]">{c.label}</span>
+                                        <span className="ml-auto shrink-0 text-[11px] font-semibold uppercase tracking-[0.06em] font-mono text-[color:var(--color-accent-hover)]">
+                                          top {Math.round((1 - c.percentile) * 100)}%
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-[color:var(--color-fg-muted)] leading-relaxed mt-1 pl-5">{c.narrative}</p>
+                                    </li>
+                                  ))}
+                              </ul>
+                            )}
                           </div>
 
+                          {/* ── WEAKNESSES — red right edge, down-arrow rows ─── */}
+                          <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg overflow-hidden" style={{ borderRight: '4px solid #dc2626' }}>
+                            <div className="px-4 py-2.5 border-b border-[color:var(--color-border)] flex items-baseline justify-between bg-[#fef2f2]">
+                              <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: '#b91c1c' }}>Weaknesses on your criteria</p>
+                              <p className="text-[11px] text-[color:var(--color-fg-subtle)] font-mono">{pc.cons.length} dims</p>
+                            </div>
+                            {pc.cons.length === 0 ? (
+                              <p className="px-4 py-4 text-xs text-[color:var(--color-fg-subtle)] italic">No significant weaknesses on your weighted dimensions.</p>
+                            ) : (
+                              <ul className="divide-y divide-[color:var(--color-border)]">
+                                {[...pc.cons]
+                                  .sort((a, b) => (b.weight * (1 - (b.value ?? 1))) - (a.weight * (1 - (a.value ?? 1))))
+                                  .slice(0, 4)
+                                  .map(c => (
+                                    <li key={c.dimension} className="px-4 py-3">
+                                      <div className="flex items-center gap-2">
+                                        <span className="shrink-0 text-sm leading-none" style={{ color: '#dc2626' }}>▼</span>
+                                        <span className="text-sm font-semibold text-[color:var(--color-fg)]">{c.label}</span>
+                                        <span className="ml-auto shrink-0 text-[11px] font-semibold uppercase tracking-[0.06em] font-mono" style={{ color: '#b91c1c' }}>
+                                          btm {Math.round(c.percentile * 100)}%
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-[color:var(--color-fg-muted)] leading-relaxed mt-1 pl-5">{c.narrative}</p>
+                                      {c.better_country && (
+                                        <p className="text-xs text-[color:var(--color-fg-subtle)] mt-1 pl-5">
+                                          <span className="font-medium text-[color:var(--color-fg-muted)]">{c.better_country.country_name}</span> leads here
+                                          {c.better_country.value != null && c.value != null
+                                            ? <> (<span className="font-mono tabular-nums">{(c.better_country.value * 10).toFixed(1)}</span> vs <span className="font-mono tabular-nums">{(c.value * 10).toFixed(1)}</span>)</>
+                                            : null}.
+                                        </p>
+                                      )}
+                                    </li>
+                                  ))}
+                              </ul>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* ── Score decomposition (technical breakdown) ─── */}
+                        <div className="pt-3">
+                          <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-[color:var(--color-fg-muted)] mb-3">
+                            Score composition · all 12 dimensions
+                          </p>
+
                           {/* Score decomposition */}
-                          <p className="text-xs text-gray-600 font-medium mb-1.5">
-                            Score breakdown — {pc.country_name} · <span className="font-mono text-white">{pc.mcda_score.toFixed(3)}</span>
+                          <p className="text-xs text-[color:var(--color-fg-subtle)] font-medium mb-1.5">
+                            Score breakdown — {pc.country_name} · <span className="font-mono text-[color:var(--color-fg)]">{pc.mcda_score.toFixed(3)}</span>
                           </p>
                           <div className="flex items-center gap-2 mb-1 px-0.5">
-                            <span className="text-xs text-gray-700 w-24 shrink-0">Dimension</span>
-                            <span className="text-xs text-gray-700 w-8 shrink-0 text-center">Imp</span>
-                            <span className="text-xs text-gray-700 flex-1 text-center">Contribution</span>
-                            <span className="text-xs text-gray-700 w-8 shrink-0 text-right">Wt%</span>
-                            <span className="text-xs text-gray-700 w-8 shrink-0 text-right">Dim</span>
-                            <span className="text-xs text-gray-700 w-8 shrink-0 text-right">Ctb</span>
+                            <span className="text-xs text-[color:var(--color-fg-subtle)] w-24 shrink-0">Dimension</span>
+                            <span className="text-xs text-[color:var(--color-fg-subtle)] w-8 shrink-0 text-center">Imp</span>
+                            <span className="text-xs text-[color:var(--color-fg-subtle)] flex-1 text-center">Contribution</span>
+                            <span className="text-xs text-[color:var(--color-fg-subtle)] w-8 shrink-0 text-right">Wt%</span>
+                            <span className="text-xs text-[color:var(--color-fg-subtle)] w-8 shrink-0 text-right">Dim</span>
+                            <span className="text-xs text-[color:var(--color-fg-subtle)] w-8 shrink-0 text-right">Ctb</span>
                           </div>
                           <div className="flex flex-col gap-1.5">
                             {dims.map(d => {
-                              const impColor = d.importance >= 8 ? 'text-red-400 bg-red-950/60 border-red-900'
-                                : d.importance >= 6 ? 'text-orange-400 bg-orange-950/60 border-orange-900'
-                                : d.importance >= 4 ? 'text-blue-400 bg-blue-950/60 border-blue-900'
-                                : 'text-gray-600 bg-gray-800 border-gray-700'
+                              const impColor = d.importance >= 8 ? 'text-[color:var(--color-fg)] bg-[color:var(--color-surface-muted)] border-red-900'
+                                : d.importance >= 6 ? 'text-[color:var(--color-fg)] bg-[color:var(--color-surface-muted)] border-[color:var(--color-border-strong)]'
+                                : d.importance >= 4 ? 'text-[color:var(--color-accent)] bg-[color:var(--color-accent-bg)] border-[color:var(--color-accent)]'
+                                : 'text-[color:var(--color-fg-subtle)] bg-[color:var(--color-surface-muted)] border-[color:var(--color-border)]'
                               return (
                                 <div key={d.k} className="flex items-center gap-2">
-                                  <span className="text-xs text-gray-500 w-24 shrink-0 truncate" title={dimLabel(d.k)}>
+                                  <span className="text-xs text-[color:var(--color-fg-muted)] w-24 shrink-0 truncate" title={dimLabel(d.k)}>
                                     {dimLabel(d.k)}
                                   </span>
                                   <span className={`text-xs font-mono font-bold w-8 shrink-0 text-center rounded border px-1 ${impColor}`}>
                                     {d.importance}
                                   </span>
-                                  <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                                  <div className="flex-1 h-1.5 bg-[color:var(--color-surface-muted)] rounded-full overflow-hidden">
                                     <div className="h-full rounded-full"
-                                      style={{ width: `${(d.contrib / maxC) * 100}%`, background: DIM_COLORS[d.k] ?? '#6b7280' }} />
+                                      style={{ width: `${(d.contrib / maxC) * 100}%`, background: DIM_COLORS[d.k] ?? '#a1a1aa' }} />
                                   </div>
-                                  <span className="text-xs font-mono text-gray-600 w-8 shrink-0 text-right">{(d.w * 100).toFixed(0)}%</span>
-                                  <span className="text-xs font-mono text-gray-600 w-8 shrink-0 text-right">{d.val != null ? (d.val * 10).toFixed(1) : '—'}</span>
-                                  <span className="text-xs font-mono text-gray-400 w-8 shrink-0 text-right font-semibold">{d.contrib > 0 ? (d.contrib * 100).toFixed(1) : '—'}</span>
+                                  <span className="text-xs font-mono text-[color:var(--color-fg-subtle)] w-8 shrink-0 text-right">{(d.w * 100).toFixed(0)}%</span>
+                                  <span className="text-xs font-mono text-[color:var(--color-fg-subtle)] w-8 shrink-0 text-right">{d.val != null ? (d.val * 10).toFixed(1) : '—'}</span>
+                                  <span className="text-xs font-mono text-[color:var(--color-fg-muted)] w-8 shrink-0 text-right font-semibold">{d.contrib > 0 ? (d.contrib * 100).toFixed(1) : '—'}</span>
                                 </div>
                               )
                             })}
                           </div>
-                          <p className="text-xs text-gray-700 mt-1.5">Imp = importance (1–10) · Wt% = derived weight · Dim = raw score ×10 · Ctb = contribution ×100</p>
+                          <p className="text-xs text-[color:var(--color-fg-subtle)] mt-1.5">Imp = importance (1–10) · Wt% = derived weight · Dim = raw score ×10 · Ctb = contribution ×100</p>
                         </div>
                       </div>
                     </div>
@@ -1395,36 +1518,36 @@ export default function App() {
                 })()}
 
                 {/* ── Ranked table ──────────────────────────────────────── */}
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-                  <div className="px-5 py-3 border-b border-gray-800 flex items-center justify-between">
+                <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg overflow-hidden">
+                  <div className="px-5 py-3 border-b border-[color:var(--color-border)] flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-semibold text-white">
+                      <p className="text-sm font-semibold text-[color:var(--color-fg)]">
                         Rankings — {aResult.year}
                         {aResult.sector !== 'ALL' && (
-                          <span className="ml-2 text-xs font-normal text-blue-400 bg-blue-950 px-2 py-0.5 rounded-full">
+                          <span className="ml-2 text-xs font-normal text-[color:var(--color-accent)] bg-[color:var(--color-accent-bg)] px-2 py-0.5 rounded-full">
                             {SECTOR_OPTIONS.find(s => s.value === aResult.sector)?.label ?? aResult.sector}
                           </span>
                         )}
                       </p>
-                      <p className="text-xs text-gray-600 mt-0.5">Sort by header · click row to analyze · checkbox to compare</p>
+                      <p className="text-xs text-[color:var(--color-fg-subtle)] mt-0.5">Sort by header · click row to analyze · checkbox to compare</p>
                     </div>
                     {aCompare.size >= 2 && (
-                      <span className="text-xs text-blue-400 border border-blue-800 bg-blue-950 px-2 py-1 rounded-lg">
+                      <span className="text-xs text-[color:var(--color-accent)] border border-[color:var(--color-border)] bg-[color:var(--color-accent-bg)] px-2 py-1 rounded-lg">
                         {aCompare.size} selected for comparison ↓
                       </span>
                     )}
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead className="text-gray-500 text-xs border-b border-gray-800">
+                      <thead className="text-[color:var(--color-fg-muted)] text-xs border-b border-[color:var(--color-border)]">
                         <tr>
                           <th className="px-3 py-2.5 w-8">
-                            <input type="checkbox" className="accent-blue-500" title="Select all"
+                            <input type="checkbox" className="accent-[color:var(--color-accent)]" title="Select all"
                               checked={aCompare.size === sortedRanked.length}
                               onChange={e => setACompare(e.target.checked
                                 ? new Set(sortedRanked.map(r => r.country_iso3)) : new Set())} />
                           </th>
-                          <th className="px-3 py-2.5 text-left w-8 cursor-pointer hover:text-gray-300"
+                          <th className="px-3 py-2.5 text-left w-8 cursor-pointer hover:text-[color:var(--color-fg)]"
                             onClick={() => { setASortBy('mcda_rank'); setASortDir(1) }}>#</th>
                           <th className="px-3 py-2.5 text-left">Country</th>
                           {thSort('mcda_score', 'Score')}
@@ -1432,7 +1555,7 @@ export default function App() {
                           {topDims.map(k => thSort(k, dimLabel(k)))}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-800/40">
+                      <tbody className="divide-y divide-[color:var(--color-border)]/40">
                         {sortedRanked
                           .filter(r => {
                             const q = aSearch.trim().toUpperCase()
@@ -1447,9 +1570,9 @@ export default function App() {
                             return (
                               <>
                                 <tr key={r.country_iso3}
-                                  className={`transition-colors ${selected ? 'bg-blue-950/40' : inCompare ? 'bg-purple-950/20' : 'hover:bg-gray-800/40'}`}>
+                                  className={`transition-colors ${selected ? 'bg-[color:var(--color-accent-bg)]' : inCompare ? 'bg-[color:var(--color-accent-bg)]' : 'hover:bg-[color:var(--color-surface-muted)]'}`}>
                                   <td className="px-3 py-3">
-                                    <input type="checkbox" className="accent-blue-500"
+                                    <input type="checkbox" className="accent-[color:var(--color-accent)]"
                                       checked={inCompare}
                                       onChange={e => {
                                         const s = new Set(aCompare)
@@ -1457,7 +1580,7 @@ export default function App() {
                                         setACompare(s)
                                       }} />
                                   </td>
-                                  <td className="px-3 py-3 text-xs text-gray-500 font-mono cursor-pointer"
+                                  <td className="px-3 py-3 text-xs text-[color:var(--color-fg-muted)] font-mono cursor-pointer"
                                     onClick={() => selected ? (setACountry(''), setAFocusRaw('')) : handleFocusCountry(r.country_iso3)}>
                                     {i < 3 && aSortBy === 'mcda_rank' ? ['🥇','🥈','🥉'][i] : r.mcda_rank}
                                   </td>
@@ -1465,18 +1588,18 @@ export default function App() {
                                     onClick={() => selected ? (setACountry(''), setAFocusRaw('')) : handleFocusCountry(r.country_iso3)}>
                                     <div className="flex items-center gap-1.5">
                                       <div>
-                                        <div className="text-xs font-medium text-gray-100">{r.country_name}</div>
-                                        <div className="text-xs text-gray-600">{r.continent}</div>
+                                        <div className="text-xs font-medium text-[color:var(--color-fg)]">{r.country_name}</div>
+                                        <div className="text-xs text-[color:var(--color-fg-subtle)]">{r.continent}</div>
                                       </div>
                                       {!r.has_vulnerability && (
-                                        <span title="Vulnerability scores estimated (no source data)" className="text-gray-700 text-xs border border-gray-800 rounded px-1">~vuln</span>
+                                        <span title="Vulnerability scores estimated (no source data)" className="text-[color:var(--color-fg-subtle)] text-xs border border-[color:var(--color-border)] rounded px-1">~vuln</span>
                                       )}
                                     </div>
                                   </td>
                                   <td className="px-3 py-3 text-right cursor-pointer"
                                     onClick={() => selected ? (setACountry(''), setAFocusRaw('')) : handleFocusCountry(r.country_iso3)}>
                                     <div className="flex items-center justify-end gap-1.5">
-                                      <div className="w-14 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                                      <div className="w-14 h-1.5 bg-[color:var(--color-surface-muted)] rounded-full overflow-hidden">
                                         <div className="h-full rounded-full" style={{ width:`${r.mcda_score*100}%`, background: scoreToColor(r.mcda_score) }} />
                                       </div>
                                       <span className="text-xs font-mono font-semibold" style={{ color: scoreToColor(r.mcda_score) }}>
@@ -1485,26 +1608,26 @@ export default function App() {
                                     </div>
                                   </td>
                                   <td className="px-3 py-3 text-right text-xs font-mono">
-                                    {delta == null ? <span className="text-gray-700">—</span>
-                                      : delta > 0 ? <span className="text-green-400">↑{Math.abs(Math.round(delta))}</span>
-                                      : delta < 0 ? <span className="text-red-400">↓{Math.abs(Math.round(delta))}</span>
-                                      : <span className="text-gray-600">→</span>}
+                                    {delta == null ? <span className="text-[color:var(--color-fg-subtle)]">—</span>
+                                      : delta > 0 ? <span className="text-[color:var(--color-accent)]">↑{Math.abs(Math.round(delta))}</span>
+                                      : delta < 0 ? <span className="text-[color:var(--color-fg)]">↓{Math.abs(Math.round(delta))}</span>
+                                      : <span className="text-[color:var(--color-fg-subtle)]">→</span>}
                                   </td>
                                   {topDims.map(k => {
                                     const v = r[k] as number | null
                                     return (
                                       <td key={k} className="px-3 py-3 text-right">
                                         {v != null
-                                          ? <span className={`text-xs font-mono ${v >= 0.7 ? 'text-red-400' : v >= 0.4 ? 'text-orange-400' : 'text-gray-500'}`}>{(v*10).toFixed(1)}</span>
-                                          : <span className="text-gray-700 text-xs">—</span>}
+                                          ? <span className={`text-xs font-mono ${v >= 0.7 ? 'text-[color:var(--color-fg)]' : v >= 0.4 ? 'text-[color:var(--color-fg)]' : 'text-[color:var(--color-fg-muted)]'}`}>{(v*10).toFixed(1)}</span>
+                                          : <span className="text-[color:var(--color-fg-subtle)] text-xs">—</span>}
                                       </td>
                                     )
                                   })}
                                 </tr>
                                 {selected && (
                                   <tr key={`${r.country_iso3}-loading`}>
-                                    <td colSpan={5 + topDims.length} className="px-5 py-2 bg-blue-950/10 border-b border-blue-900/20">
-                                      <span className="text-xs text-blue-400">
+                                    <td colSpan={5 + topDims.length} className="px-5 py-2 bg-[color:var(--color-surface-muted)] border-b border-[color:var(--color-border)]">
+                                      <span className="text-xs text-[color:var(--color-accent)]">
                                         {aLoading ? 'Fetching analysis…' : 'Analysis shown above ↑'}
                                       </span>
                                     </td>
@@ -1524,27 +1647,27 @@ export default function App() {
                   const allDims = Object.keys(aResult.importance_scores)
                     .sort((a, b) => aResult.importance_scores[b] - aResult.importance_scores[a])
                   return (
-                    <div className="bg-gray-900 border border-gray-700 rounded-2xl overflow-hidden">
-                      <div className="px-5 py-3 border-b border-gray-800 flex items-center justify-between">
-                        <p className="text-sm font-semibold text-white">Side-by-side comparison</p>
-                        <button onClick={() => setACompare(new Set())} className="text-xs text-gray-600 hover:text-gray-400">Clear</button>
+                    <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg overflow-hidden">
+                      <div className="px-5 py-3 border-b border-[color:var(--color-border)] flex items-center justify-between">
+                        <p className="text-sm font-semibold text-[color:var(--color-fg)]">Side-by-side comparison</p>
+                        <button onClick={() => setACompare(new Set())} className="text-xs text-[color:var(--color-fg-subtle)] hover:text-[color:var(--color-fg-muted)]">Clear</button>
                       </div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs">
-                          <thead className="border-b border-gray-800">
+                          <thead className="border-b border-[color:var(--color-border)]">
                             <tr>
-                              <th className="px-4 py-2.5 text-left text-gray-600 font-normal w-40">Dimension</th>
+                              <th className="px-4 py-2.5 text-left text-[color:var(--color-fg-subtle)] font-normal w-40">Dimension</th>
                               {compared.map(r => (
-                                <th key={r.country_iso3} className="px-4 py-2.5 text-center font-semibold text-gray-200">
+                                <th key={r.country_iso3} className="px-4 py-2.5 text-center font-semibold text-[color:var(--color-fg)]">
                                   {r.country_name}
-                                  <div className="text-gray-600 font-normal">#{r.mcda_rank}</div>
+                                  <div className="text-[color:var(--color-fg-subtle)] font-normal">#{r.mcda_rank}</div>
                                 </th>
                               ))}
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-gray-800/40">
-                            <tr className="bg-gray-800/30">
-                              <td className="px-4 py-2 text-gray-500 font-medium">Overall Score</td>
+                          <tbody className="divide-y divide-[color:var(--color-border)]/40">
+                            <tr className="bg-[color:var(--color-surface-muted)]/30">
+                              <td className="px-4 py-2 text-[color:var(--color-fg-muted)] font-medium">Overall Score</td>
                               {compared.map(r => (
                                 <td key={r.country_iso3} className="px-4 py-2 text-center">
                                   <span className="font-mono font-bold text-sm" style={{ color: scoreToColor(r.mcda_score) }}>
@@ -1558,10 +1681,10 @@ export default function App() {
                               const maxVal = Math.max(...vals.filter((v): v is number => v != null))
                               const importance = aResult.importance_scores[dim]
                               return (
-                                <tr key={dim} className={importance >= 7 ? 'bg-blue-950/10' : ''}>
-                                  <td className="px-4 py-2 text-gray-400">
+                                <tr key={dim} className={importance >= 7 ? 'bg-[color:var(--color-surface-muted)]' : ''}>
+                                  <td className="px-4 py-2 text-[color:var(--color-fg-muted)]">
                                     {dimLabel(dim)}
-                                    {importance >= 7 && <span className="ml-1 text-blue-600 text-xs">★</span>}
+                                    {importance >= 7 && <span className="ml-1 text-[color:var(--color-accent)] text-xs">★</span>}
                                   </td>
                                   {compared.map((r, ci) => {
                                     const v = vals[ci]
@@ -1569,10 +1692,10 @@ export default function App() {
                                     return (
                                       <td key={r.country_iso3} className="px-4 py-2 text-center">
                                         {v != null ? (
-                                          <span className={`font-mono ${isMax ? 'text-white font-bold' : 'text-gray-500'}`}>
+                                          <span className={`font-mono ${isMax ? 'text-[color:var(--color-fg)] font-bold' : 'text-[color:var(--color-fg-muted)]'}`}>
                                             {(v * 10).toFixed(1)}
                                           </span>
-                                        ) : <span className="text-gray-700">—</span>}
+                                        ) : <span className="text-[color:var(--color-fg-subtle)]">—</span>}
                                       </td>
                                     )
                                   })}
@@ -1588,13 +1711,13 @@ export default function App() {
 
                 {/* ── Metric leaders (no country pinned) ────────────────── */}
                 {!pc && aResult.dimension_leaders.length > 0 && (
-                  <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-                    <div className="px-5 py-3 border-b border-gray-800">
-                      <p className="text-sm font-semibold text-white">Who leads each metric</p>
-                      <p className="text-xs text-gray-600 mt-0.5">Click to expand pro/con for that country</p>
+                  <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg overflow-hidden">
+                    <div className="px-5 py-3 border-b border-[color:var(--color-border)]">
+                      <p className="text-sm font-semibold text-[color:var(--color-fg)]">Who leads each metric</p>
+                      <p className="text-xs text-[color:var(--color-fg-subtle)] mt-0.5">Click to expand pro/con for that country</p>
                     </div>
                     <table className="w-full text-xs">
-                      <thead className="text-gray-600 border-b border-gray-800">
+                      <thead className="text-[color:var(--color-fg-subtle)] border-b border-[color:var(--color-border)]">
                         <tr>
                           <th className="px-4 py-2 text-left font-normal">Metric</th>
                           <th className="px-4 py-2 text-left font-normal">Top country</th>
@@ -1603,24 +1726,24 @@ export default function App() {
                           <th className="px-4 py-2 text-right font-normal">Weight</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-800/40">
+                      <tbody className="divide-y divide-[color:var(--color-border)]/40">
                         {[...aResult.dimension_leaders]
                           .sort((a, b) => b.weight - a.weight)
                           .map(d => (
                             <tr key={d.dimension}
-                              className="hover:bg-gray-800/40 cursor-pointer transition-colors"
+                              className="hover:bg-[color:var(--color-surface-muted)] cursor-pointer transition-colors"
                               onClick={() => setACountry(d.country_iso3)}>
                               <td className="px-4 py-2.5">
-                                <span className="text-gray-300 font-medium">{d.label}</span>
-                                <span className="text-gray-600 ml-2">{d.group}</span>
+                                <span className="text-[color:var(--color-fg)] font-medium">{d.label}</span>
+                                <span className="text-[color:var(--color-fg-subtle)] ml-2">{d.group}</span>
                               </td>
-                              <td className="px-4 py-2.5 text-gray-200">{d.country_name}</td>
-                              <td className="px-4 py-2.5 text-right font-mono text-orange-300">
+                              <td className="px-4 py-2.5 text-[color:var(--color-fg)]">{d.country_name}</td>
+                              <td className="px-4 py-2.5 text-right font-mono text-[color:var(--color-fg)]">
                                 {d.value != null ? (d.value*10).toFixed(1) : '—'}
                               </td>
-                              <td className="px-4 py-2.5 text-right text-gray-500 font-mono">#{d.mcda_rank}</td>
+                              <td className="px-4 py-2.5 text-right text-[color:var(--color-fg-muted)] font-mono">#{d.mcda_rank}</td>
                               <td className="px-4 py-2.5 text-right">
-                                <span className={`font-mono ${d.weight >= 0.1 ? 'text-blue-400' : 'text-gray-600'}`}>
+                                <span className={`font-mono ${d.weight >= 0.1 ? 'text-[color:var(--color-accent)]' : 'text-[color:var(--color-fg-subtle)]'}`}>
                                   {(d.weight*100).toFixed(0)}%
                                 </span>
                               </td>
@@ -1633,12 +1756,6 @@ export default function App() {
               </>
             )}
 
-            {!aResult && !aLoading && !aError && (
-              <div className="mt-16 text-center">
-                <p className="text-3xl mb-3">🎯</p>
-                <p className="text-sm text-gray-500">Describe your mandate above to rank which crises match — and why.</p>
-              </div>
-            )}
           </div>
           )
         })()}
@@ -1647,62 +1764,63 @@ export default function App() {
         {tab === 'query' && (
           <div className="flex flex-col gap-6">
             <form onSubmit={handleQuery} className="flex flex-col gap-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[color:var(--color-fg-muted)]">Ask a question</p>
               <textarea
-                className="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none text-sm"
+                className="w-full bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg px-4 py-3 text-[color:var(--color-fg)] placeholder:text-[color:var(--color-fg-subtle)] focus:outline-none focus:border-[color:var(--color-accent)] resize-none text-sm"
                 rows={2}
-                placeholder="e.g. Which African countries have the most people in need but under 30% funded in 2024?"
+                placeholder={sqlTypewriter}
                 value={query}
                 onChange={e => setQuery(e.target.value)}
               />
               <div className="flex items-center gap-4 flex-wrap">
                 {['from','to'].map((label, idx) => (
-                  <label key={label} className="text-sm text-gray-400 flex items-center gap-2">
+                  <label key={label} className="text-sm text-[color:var(--color-fg-muted)] flex items-center gap-2">
                     Year {label}
-                    <select className="bg-gray-900 border border-gray-700 rounded px-2 py-1 text-gray-100 text-sm"
+                    <select className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded px-2 py-1 text-[color:var(--color-fg)] text-sm"
                       value={idx === 0 ? yearFrom : yearTo}
                       onChange={e => idx === 0 ? setYearFrom(Number(e.target.value)) : setYearTo(Number(e.target.value))}>
                       {YEARS.map(y => <option key={y}>{y}</option>)}
                     </select>
                   </label>
                 ))}
-                <label className="text-sm text-gray-400 flex items-center gap-2 ml-auto">
-                  <input type="checkbox" checked={showSql} onChange={e => setShowSql(e.target.checked)} className="accent-blue-500" />
+                <label className="text-sm text-[color:var(--color-fg-muted)] flex items-center gap-2 ml-auto">
+                  <input type="checkbox" checked={showSql} onChange={e => setShowSql(e.target.checked)} className="accent-[color:var(--color-accent)]" />
                   Show SQL
                 </label>
                 <button type="submit" disabled={qLoading || !query.trim()}
-                  className="bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors">
+                  className="bg-[color:var(--color-accent)] hover:bg-[color:var(--color-accent-hover)] disabled:bg-[color:var(--color-border)] disabled:text-[color:var(--color-fg-subtle)] disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors">
                   {qLoading ? 'Analysing…' : 'Analyse'}
                 </button>
               </div>
             </form>
 
-            {qError && <div className="bg-red-950 border border-red-800 text-red-300 rounded-xl px-4 py-3 text-sm">{qError}</div>}
+            {qError && <div className="bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] text-[color:var(--color-fg)] rounded-lg px-4 py-3 text-sm">{qError}</div>}
 
             {qResult && (
               <div className="flex flex-col gap-6">
                 {showSql && (
-                  <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
-                    <p className="text-xs text-gray-500 mb-2 uppercase tracking-wide font-medium">Generated SQL</p>
-                    <pre className="text-xs text-green-300 overflow-x-auto whitespace-pre-wrap">{qResult.sql}</pre>
+                  <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg p-4">
+                    <p className="text-xs text-[color:var(--color-fg-muted)] mb-2 uppercase tracking-wide font-medium">Generated SQL</p>
+                    <pre className="text-xs font-mono tabular-nums text-[color:var(--color-fg)] bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] rounded-md p-4 overflow-x-auto whitespace-pre-wrap">{qResult.sql}</pre>
                   </div>
                 )}
-                <p className="text-sm text-gray-500">{qResult.row_count} rows returned</p>
+                <p className="text-sm text-[color:var(--color-fg-muted)]">{qResult.row_count} rows returned</p>
 
                 {/* World map for query results */}
                 {Object.keys(qIsoMap).length > 0 && (
-                  <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
-                    <p className="text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wide">Result Countries</p>
+                  <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg p-6">
+                    <p className="text-xs font-semibold text-[color:var(--color-fg-muted)] mb-3 uppercase tracking-wide">Result Countries</p>
                     <ComposableMap projectionConfig={{ scale: 153 }}>
                       <Geographies geography={GEO_URL}>
                         {({ geographies }: { geographies: { rsmKey: string; properties: Record<string,unknown> }[] }) =>
                           geographies.map(geo => {
-                            const iso = geo.properties.ISO_A3 as string
+                            const iso = geoIso3(geo) ?? ''
                             const score = qIsoMap[iso]
                             return (
                               <Geography key={geo.rsmKey} geography={geo}
-                                fill={score != null ? scoreToColor(score) : '#1f2937'}
-                                stroke="#111827" strokeWidth={0.4}
-                                style={{ default:{outline:'none'}, hover:{fill:'#60a5fa',outline:'none'}, pressed:{outline:'none'} }}
+                                fill={score != null ? scoreToColor(score) : '#fafafa'}
+                                stroke="#e4e4e7" strokeWidth={0.5}
+                                style={{ default:{outline:'none'}, hover:{fill:'#0d9488',outline:'none'}, pressed:{outline:'none'} }}
                               />
                             )
                           })
@@ -1713,21 +1831,21 @@ export default function App() {
                 )}
 
                 {/* Results table */}
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
-                      <thead className="text-gray-500 text-xs uppercase border-b border-gray-800">
+                      <thead className="text-[color:var(--color-fg-muted)] text-xs uppercase border-b border-[color:var(--color-border)]">
                         <tr>{qResult.columns.map(col => (
                           <th key={col} className="px-4 py-3 text-left font-medium whitespace-nowrap">{col}</th>
                         ))}</tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-800/60">
+                      <tbody className="divide-y divide-[color:var(--color-border)]">
                         {qResult.rows.map((row, i) => (
-                          <tr key={i} className="hover:bg-gray-800/50 transition-colors">
+                          <tr key={i} className="hover:bg-[color:var(--color-surface-muted)] transition-colors">
                             {qResult.columns.map(col => (
-                              <td key={col} className="px-4 py-2.5 text-gray-300 whitespace-nowrap font-mono text-xs">
+                              <td key={col} className="px-4 py-2.5 text-[color:var(--color-fg)] whitespace-nowrap font-mono text-xs">
                                 {row[col] == null
-                                  ? <span className="text-gray-700">—</span>
+                                  ? <span className="text-[color:var(--color-fg-subtle)]">—</span>
                                   : typeof row[col] === 'number'
                                     ? (row[col] as number) > 1000
                                       ? (row[col] as number).toLocaleString()
@@ -1745,9 +1863,9 @@ export default function App() {
             )}
 
             {!qResult && !qLoading && !qError && (
-              <div className="mt-20 text-center text-gray-700">
+              <div className="mt-20 text-center text-[color:var(--color-fg-subtle)]">
                 <p className="text-4xl mb-4">🔍</p>
-                <p className="text-sm text-gray-500">Try: <em className="text-gray-400">Which countries have more than 5M people in need but under 30% funded?</em></p>
+                <p className="text-sm text-[color:var(--color-fg-muted)]">Try: <em className="text-[color:var(--color-fg-muted)]">Which countries have more than 5M people in need but under 30% funded?</em></p>
               </div>
             )}
           </div>
