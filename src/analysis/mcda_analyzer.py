@@ -269,7 +269,8 @@ def extract_weights(
     )
 
     raw_country = parsed.get("country_iso3")
-    extracted_country: str | None = raw_country.strip().upper() if isinstance(raw_country, str) and raw_country.strip() else None
+    _rc = raw_country.strip().upper() if isinstance(raw_country, str) else ""
+    extracted_country: str | None = _rc if _rc and _rc not in ("NULL", "NONE", "N/A", "") else None
 
     raw_sector = parsed.get("sector")
     extracted_sector: str | None = raw_sector.strip().upper() if isinstance(raw_sector, str) and raw_sector.strip().upper() in _VALID_SECTORS else None
