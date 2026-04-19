@@ -5,8 +5,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/query': 'http://localhost:8000',
-      '/health': 'http://localhost:8000',
+      '/query':   'http://localhost:8000',
+      '/score':   'http://localhost:8000',
+      '/analyze': 'http://localhost:8000',
+      '/health':  'http://localhost:8000',
     },
   },
 })
