@@ -27,6 +27,7 @@ DDL = {
             country_name  STRING  NOT NULL,
             region        STRING  NOT NULL,
             region_name   STRING  NOT NULL,
+            continent     STRING  NOT NULL,
             population    DOUBLE
         ) USING DELTA
     """,

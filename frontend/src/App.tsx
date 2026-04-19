@@ -1841,8 +1841,37 @@ export default function App() {
 
                   if (pts.length < 3) return null
 
-                  const X_SPLIT = 50   // 50% coverage divider
-                  const Y_SPLIT = 3.0  // INFORM severity 3/5 divider
+                  // ── Dynamic "nice" axis domains ─────────────────────────
+                  const xs = pts.map(p => p.x)
+                  const ys = pts.map(p => p.y)
+                  const xMinD = Math.min(...xs), xMaxD = Math.max(...xs)
+                  const yMinD = Math.min(...ys), yMaxD = Math.max(...ys)
+                  const xPad = Math.max((xMaxD - xMinD) * 0.08, 2)
+                  const yPad = Math.max((yMaxD - yMinD) * 0.08, 0.1)
+                  const xLo = Math.max(0,   Math.floor((xMinD - xPad) / 10) * 10)
+                  const xHiRaw = Math.min(100, Math.ceil ((xMaxD + xPad) / 10) * 10)
+                  const xHi = xHiRaw === xLo ? Math.min(100, xLo + 10) : xHiRaw
+                  const yLo = Math.max(0, Math.floor((yMinD - yPad) * 2) / 2)
+                  const yHiRaw = Math.min(5, Math.ceil ((yMaxD + yPad) * 2) / 2)
+                  const yHi = yHiRaw === yLo ? Math.min(5, yLo + 0.5) : yHiRaw
+                  const xDomain: [number, number] = [xLo, xHi]
+                  const yDomain: [number, number] = [yLo, yHi]
+
+                  const xTicks: number[] = []
+                  for (let v = xLo; v <= xHi + 1e-9; v += 10) xTicks.push(Math.round(v))
+                  const yStep = (yHi - yLo) <= 2 ? 0.5 : 1
+                  const yTicks: number[] = []
+                  for (let v = yLo; v <= yHi + 1e-9; v += yStep)
+                    yTicks.push(Math.round(v * 10) / 10)
+
+                  // Median-based quadrant dividers (data-driven)
+                  const median = (arr: number[]) => {
+                    const s = [...arr].sort((a, b) => a - b)
+                    const m = Math.floor(s.length / 2)
+                    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2
+                  }
+                  const X_SPLIT = median(xs)
+                  const Y_SPLIT = median(ys)
 
                   const CustomDot = (props: any) => {
                     const { cx, cy, payload } = props
@@ -1879,8 +1908,8 @@ export default function App() {
                     const d = payload[0]?.payload
                     if (!d) return null
                     return (
-                      <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-xl px-3 py-2.5 text-xs shadow-lg max-w-[180px]">
-                        <p className="font-semibold text-[color:var(--color-fg)] mb-1">{d.name}</p>
+                      <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-xl px-3 py-2.5 text-xs shadow-lg min-w-[160px] max-w-[220px]">
+                        <p className="font-semibold text-[color:var(--color-fg)] mb-1 whitespace-nowrap overflow-hidden text-ellipsis">{d.name}</p>
                         <p className="text-[color:var(--color-fg-subtle)]">Severity: <span className="font-mono text-[color:var(--color-fg)]">{d.y}/5</span></p>
                         <p className="text-[color:var(--color-fg-subtle)]">Coverage: <span className="font-mono text-[color:var(--color-fg)]">{d.x}%</span></p>
                         {d.pin != null && (
@@ -1902,40 +1931,36 @@ export default function App() {
                           Top-left = most overlooked · bubble size = people in need · click to analyze a country
                         </p>
                       </div>
-                      <div className="p-4 relative">
-                        {/* Quadrant labels */}
-                        <div className="absolute inset-4 pointer-events-none" style={{ bottom: 40, top: 20 }}>
-                          <div className="absolute top-1 left-1 text-[10px] font-semibold text-red-400/70 bg-red-400/5 rounded px-1.5 py-0.5">
+                      <div className="p-4">
+                        {/* Quadrant labels — outside the plot, above the chart */}
+                        <div className="flex justify-between items-center px-2 mb-1">
+                          <span className="text-[10px] font-semibold text-red-400/80 bg-red-400/10 rounded px-1.5 py-0.5">
                             Severe &amp; Overlooked ★
-                          </div>
-                          <div className="absolute top-1 right-1 text-[10px] font-semibold text-emerald-400/70 bg-emerald-400/5 rounded px-1.5 py-0.5">
+                          </span>
+                          <span className="text-[10px] font-semibold text-emerald-400/80 bg-emerald-400/10 rounded px-1.5 py-0.5">
                             Severe &amp; Funded
-                          </div>
-                          <div className="absolute bottom-1 left-1 text-[10px] font-semibold text-[color:var(--color-fg-subtle)]/50 rounded px-1.5 py-0.5">
-                            Lower Risk &amp; Overlooked
-                          </div>
-                          <div className="absolute bottom-1 right-1 text-[10px] font-semibold text-[color:var(--color-fg-subtle)]/50 rounded px-1.5 py-0.5">
-                            Lower Risk &amp; Funded
-                          </div>
+                          </span>
                         </div>
 
                         <ResponsiveContainer width="100%" height={340}>
-                          <ScatterChart margin={{ top: 20, right: 24, bottom: 32, left: 24 }}>
+                          <ScatterChart margin={{ top: 10, right: 24, bottom: 32, left: 24 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.4} />
-                            <XAxis type="number" dataKey="x" domain={[0, 100]} tickCount={6}
+                            <XAxis type="number" dataKey="x" domain={xDomain} ticks={xTicks} allowDataOverflow={false}
                               tick={{ fontSize: 10, fill: 'var(--color-fg-subtle)' }}
                               tickFormatter={v => `${v}%`}>
                               <Label value="Funding Coverage →" position="insideBottom" offset={-18}
                                 style={{ fontSize: 10, fill: 'var(--color-fg-subtle)' }} />
                             </XAxis>
-                            <YAxis type="number" dataKey="y" domain={[0, 5]} tickCount={6}
+                            <YAxis type="number" dataKey="y" domain={yDomain} ticks={yTicks} allowDataOverflow={false}
                               tick={{ fontSize: 10, fill: 'var(--color-fg-subtle)' }}
                               tickFormatter={v => `${v}`}>
                               <Label value="INFORM Severity →" angle={-90} position="insideLeft" offset={10}
                                 style={{ fontSize: 10, fill: 'var(--color-fg-subtle)' }} />
                             </YAxis>
                             <ZAxis dataKey="z" range={[40, 400]} />
-                            <ReTooltip content={<CustomTooltip />} />
+                            <ReTooltip content={<CustomTooltip />}
+                              allowEscapeViewBox={{ x: true, y: true }}
+                              wrapperStyle={{ zIndex: 50, pointerEvents: 'none' }} />
                             <ReferenceLine x={X_SPLIT} stroke="var(--color-border)" strokeDasharray="4 4" strokeWidth={1.5} />
                             <ReferenceLine y={Y_SPLIT} stroke="var(--color-border)" strokeDasharray="4 4" strokeWidth={1.5} />
                             <Scatter data={pts} shape={<CustomDot />}>
@@ -1946,8 +1971,18 @@ export default function App() {
                           </ScatterChart>
                         </ResponsiveContainer>
 
+                        {/* Quadrant labels — outside the plot, below the chart */}
+                        <div className="flex justify-between items-center px-2 mt-1">
+                          <span className="text-[10px] font-semibold text-[color:var(--color-fg-subtle)]/70 rounded px-1.5 py-0.5">
+                            Lower Risk &amp; Overlooked
+                          </span>
+                          <span className="text-[10px] font-semibold text-[color:var(--color-fg-subtle)]/70 rounded px-1.5 py-0.5">
+                            Lower Risk &amp; Funded
+                          </span>
+                        </div>
+
                         {/* Legend */}
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 justify-center mt-1">
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 justify-center mt-2">
                           {Object.entries(CONT_COLOR).map(([c, col]) => (
                             <span key={c} className="flex items-center gap-1 text-[10px] text-[color:var(--color-fg-subtle)]">
                               <span className="w-2 h-2 rounded-full inline-block" style={{ background: col }} />

@@ -552,6 +552,8 @@ def _dimension_narrative(
         ny = _raw("n_years")
         if ny is None or ny < 2:
             return "Not enough years on record to assess chronic underfunding patterns."
+        if yu is None:
+            return f"Chronic underfunding is {pct_str}, but the count of underfunded years is not reported."
         return (
             f"Below 30% coverage for {int(yu)} of the last {int(ny)} years on record — {'chronically neglected over time' if high else 'relatively consistent funding history' if low else 'intermittent underfunding'}."
         )
