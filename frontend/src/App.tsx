@@ -296,10 +296,10 @@ function BubbleTooltip({ active, payload }: { active?: boolean; payload?: { payl
   if (!active || !payload?.length) return null
   const r = payload[0].payload
   return (
-    <div className="bg-white rounded-md p-3 text-xs shadow-md max-w-xs" style={{ boxShadow: '0 2px 8px rgba(24, 24, 27, 0.08)' }}>
+    <div className="bg-white rounded-[10px] p-3 text-xs shadow-[0_4px_12px_rgba(24,24,27,0.06),_0_1px_2px_rgba(24,24,27,0.04)] max-w-xs" style={{ boxShadow: '0 2px 8px rgba(24, 24, 27, 0.08)' }}>
       <div className="font-semibold text-[color:var(--color-fg)] flex items-center gap-2 mb-1.5">
         {r.country_name}
-        {r.robust && <span className="bg-[color:var(--color-accent-bg)] text-[color:var(--color-accent-hover)] px-1.5 py-0.5 rounded-sm text-[10px] font-medium uppercase tracking-wider">Robust</span>}
+        {r.robust && <span className="bg-[color:var(--color-accent-bg)] text-[color:var(--color-accent-hover)] px-1.5 py-0.5 rounded-[6px] text-[10px] font-medium uppercase tracking-wider">Robust</span>}
       </div>
       <div className="text-[color:var(--color-fg-muted)] space-y-0.5 font-mono tabular-nums">
         <div>Score: <span className="text-[color:var(--color-fg)]">{r.overlooked_score.toFixed(3)}</span>
@@ -321,7 +321,7 @@ function PcaTooltip({ active, payload }: { active?: boolean; payload?: { payload
   if (!active || !payload?.length) return null
   const r = payload[0].payload
   return (
-    <div className="bg-white rounded-md p-3 text-xs shadow-md max-w-xs" style={{ boxShadow: '0 2px 8px rgba(24, 24, 27, 0.08)' }}>
+    <div className="bg-white rounded-[10px] p-3 text-xs shadow-[0_4px_12px_rgba(24,24,27,0.06),_0_1px_2px_rgba(24,24,27,0.04)] max-w-xs" style={{ boxShadow: '0 2px 8px rgba(24, 24, 27, 0.08)' }}>
       <div className="font-semibold text-[color:var(--color-fg)] mb-1.5">
         {r.country_name} {r.robust ? '★' : ''}
       </div>
@@ -628,28 +628,43 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[color:var(--color-surface)] text-[color:var(--color-fg)] flex flex-col">
 
-      {/* Tabs */}
-      <div className="border-b border-[color:var(--color-border)] px-8 flex gap-6">
-        {([
-          ['score',   'Gap Scoring'],
-          ['analyze', 'Prioritize'],
-          ['query',   'SQL Query'],
-        ] as const).map(([t, label]) => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-0 py-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
- tab === t
-                ? 'text-[color:var(--color-fg)] border-[color:var(--color-accent)]'
-                : 'text-[color:var(--color-fg-muted)] border-transparent hover:text-[color:var(--color-fg)]'}`}>
-            {label}
-          </button>
-        ))}
+      {/* Tabs — sticky glass nav with sliding underline */}
+      <div className="glass-nav sticky top-0 z-30 px-12">
+        <div className="relative flex gap-10">
+          {([
+            ['score',   'Gap Scoring'],
+            ['analyze', 'Prioritize'],
+            ['query',   'SQL Query'],
+          ] as const).map(([t, label], idx) => {
+            const active = tab === t
+            return (
+              <button key={t} onClick={() => setTab(t)}
+                data-tab-index={idx}
+                className={`relative px-0 py-4 text-sm font-medium transition-colors duration-300 ${
+                  active
+                    ? 'text-[color:var(--color-fg)]'
+                    : 'text-[color:var(--color-fg-muted)] hover:text-[color:var(--color-fg)]'}`}>
+                {label}
+                {active && (
+                  <span
+                    aria-hidden
+                    className="absolute left-0 right-0 bottom-0 h-[2px] rounded-full"
+                    style={{
+                      background: 'linear-gradient(90deg, transparent 0%, var(--color-accent) 15%, var(--color-accent) 85%, transparent 100%)',
+                    }}
+                  />
+                )}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
-      <main className="flex-1 px-8 py-8 max-w-7xl mx-auto w-full">
+      <main className="flex-1 px-12 py-12 max-w-7xl mx-auto w-full">
 
         {/* ═══ SCORE TAB ═══════════════════════════════════════════════════ */}
         {tab === 'score' && (
-          <div className="flex flex-col gap-8">
+          <div className="flex flex-col gap-12">
 
             {/* Controls */}
             <div className="flex flex-col gap-6">
@@ -660,12 +675,12 @@ export default function App() {
                 <div className="flex flex-col gap-2">
                   <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-[color:var(--color-fg-muted)]">Year</span>
                   <div className="flex items-center gap-3">
-                    <div className="inline-flex rounded-md border border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)] p-0.5">
+                    <div className="inline-flex rounded-[10px] border border-[color:var(--color-border)] bg-[color:var(--color-surface-muted)] p-0.5">
                       {YEARS.map(y => (
                         <button key={y} onClick={() => { setPlaying(false); setScoreYear(y); runScore(y, weights) }}
                           className={`px-3 py-1 text-[13px] font-mono tabular-nums rounded transition-colors ${
  displayYear === y
-                              ? 'bg-[color:var(--color-surface)] text-[color:var(--color-fg)] shadow-sm'
+                              ? 'bg-[color:var(--color-surface)] text-[color:var(--color-fg)] shadow-[0_1px_2px_rgba(24,24,27,0.04),_0_1px_1px_rgba(24,24,27,0.02)]'
                               : 'text-[color:var(--color-fg-muted)] hover:text-[color:var(--color-fg)]'}`}>
                           {y}
                         </button>
@@ -673,7 +688,7 @@ export default function App() {
                     </div>
                     <button
                       onClick={() => { setAnimYear(scoreYear); setPlaying(p => !p) }}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] text-xs font-medium border transition-colors ${
  playing
                           ? 'border-[color:var(--color-accent)] text-[color:var(--color-accent)] bg-[color:var(--color-accent-bg)]'
                           : 'border-[color:var(--color-border)] text-[color:var(--color-fg-muted)] hover:text-[color:var(--color-fg)] hover:border-[color:var(--color-border-strong)]'}`}>
@@ -704,12 +719,12 @@ export default function App() {
 
                 <div className="flex gap-2 ml-auto">
                   <button onClick={() => runScore(scoreYear, weights)} disabled={sLoading}
-                    className="bg-[color:var(--color-accent)] hover:bg-[color:var(--color-accent-hover)] disabled:bg-[color:var(--color-border)] disabled:text-[color:var(--color-fg-subtle)] disabled:cursor-not-allowed text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                    className="btn-primary px-4 py-2 rounded-[12px] text-sm font-medium">
                     {sLoading ? '…' : 'Recalculate'}
                   </button>
                   {sResult && (
                     <button onClick={() => exportCsv(sResult.rows, sResult.year)}
-                      className="border border-[color:var(--color-border)] hover:border-[color:var(--color-border-strong)] text-[color:var(--color-fg-muted)] hover:text-[color:var(--color-fg)] px-3 py-2 rounded-md text-sm font-medium transition-colors">
+                      className="border border-[color:var(--color-border)] hover:border-[color:var(--color-border-strong)] text-[color:var(--color-fg-muted)] hover:text-[color:var(--color-fg)] px-3 py-2 rounded-[10px] text-sm font-medium transition-colors">
                       ↓ CSV
                     </button>
                   )}
@@ -718,7 +733,7 @@ export default function App() {
               </div>
 
               {/* Formula — its own documentation panel */}
-              <div className="bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] rounded-md px-4 py-3">
+              <div className="bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] rounded-[10px] px-4 py-3">
                 <div className="text-[11px] font-medium uppercase tracking-[0.06em] text-[color:var(--color-fg-muted)] mb-1.5">Formula</div>
                 <div className="text-xs font-mono tabular-nums text-[color:var(--color-fg-muted)] leading-relaxed pl-2">
                   <span className="text-[color:var(--color-fg)] font-semibold">overlooked</span> = (
@@ -733,7 +748,7 @@ export default function App() {
             </div>
 
             {sError && (
-              <div className="bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] rounded-md px-4 py-3 text-sm text-[color:var(--color-fg)]">{sError}</div>
+              <div className="bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] rounded-[10px] px-4 py-3 text-sm text-[color:var(--color-fg)]">{sError}</div>
             )}
 
             {sLoading && !sResult && (
@@ -756,16 +771,16 @@ export default function App() {
                   ].map((c, idx) => (
                     <div key={c.label} className={`flex flex-col gap-2 ${idx > 0 ? 'border-l border-[color:var(--color-border)] pl-6' : ''}`}>
                       <div className="text-[11px] font-medium uppercase tracking-[0.06em] text-[color:var(--color-fg-muted)]">{c.label}</div>
-                      <div className={`${c.small ? 'text-xl' : 'text-3xl'} font-semibold tabular-nums text-[color:var(--color-fg)] leading-none`}>{c.value}</div>
+                      <div className={`${c.small ? 'font-serif text-[22px]' : 'font-serif text-[34px]'} font-normal tabular-nums text-[color:var(--color-fg)] leading-[1.1]`}>{c.value}</div>
                       {c.sub && <div className="text-xs text-[color:var(--color-fg-subtle)]">{c.sub}</div>}
                     </div>
                   ))}
                 </div>
 
                 {/* ── BUBBLE CHART ── */}
-                <div className="border border-[color:var(--color-border)] rounded-lg p-6 bg-[color:var(--color-surface)]">
+                <div className="border border-[color:var(--color-border)] rounded-[20px] p-8 bg-[color:var(--color-surface)]">
                   <div className="flex items-baseline justify-between mb-1">
-                    <h2 className="text-[22px] font-semibold tracking-tight text-[color:var(--color-fg)] leading-tight">Need vs. Funding Space</h2>
+                    <h2 className="font-serif text-[26px] font-normal tracking-[-0.01em] text-[color:var(--color-fg)] leading-tight">Need vs. Funding Space</h2>
                     <span className="text-[11px] font-medium uppercase tracking-[0.06em] text-[color:var(--color-fg-muted)]">bubble = requirements · top-8 labelled</span>
                   </div>
                   <p className="text-sm text-[color:var(--color-fg-muted)] mb-6">
@@ -798,7 +813,7 @@ export default function App() {
                   <div className="flex items-center gap-6 mt-4 text-xs text-[color:var(--color-fg-muted)] justify-center">
                     {[['#3884c8','low gap'],['#f97316','medium gap'],['#dc2626','high gap'],['#7c3aed','robustly overlooked']].map(([c,l])=>(
                       <span key={l} className="flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-sm inline-block" style={{background: c}} />
+                        <span className="w-3 h-3 rounded-[6px] inline-block" style={{background: c}} />
                         <span className="font-medium">{l}</span>
                       </span>
                     ))}
@@ -806,8 +821,8 @@ export default function App() {
                 </div>
 
                 {/* ── WORLD MAP ── */}
-                <div className="border border-[color:var(--color-border)] rounded-lg p-6 bg-[color:var(--color-surface)]">
-                  <h2 className="text-[22px] font-semibold tracking-tight text-[color:var(--color-fg)] leading-tight mb-1">World Map — Overlooked Score {displayYear}</h2>
+                <div className="border border-[color:var(--color-border)] rounded-[20px] p-8 bg-[color:var(--color-surface)]">
+                  <h2 className="font-serif text-[26px] font-normal tracking-[-0.01em] text-[color:var(--color-fg)] leading-tight mb-1">World Map — Overlooked Score {displayYear}</h2>
                   <p className="text-sm text-[color:var(--color-fg-muted)] mb-6">Hover over a country for details. Purple = robustly overlooked across all ranking methods.</p>
 
                   <div className="relative">
@@ -847,18 +862,17 @@ export default function App() {
                   {/* Tooltip — fixed to viewport so it's never clipped */}
                   {hoveredCountry && (
                     <div
-                      className="pointer-events-none fixed z-50 bg-white rounded-md p-3 text-xs w-64"
+                      className="pointer-events-none fixed z-50 bg-white rounded-[10px] p-3 text-xs w-64"
                       style={{
                         left: tooltipPos.x + 14,
                         top:  tooltipPos.y - 10,
                         transform: tooltipPos.x > window.innerWidth - 280 ? 'translateX(-110%)' : undefined,
-                        boxShadow: '0 4px 16px rgba(24, 24, 27, 0.12)',
-                      }}
+                        }}
                     >
                       <div className="flex items-center gap-2 mb-2">
                         <span className="font-semibold text-sm text-[color:var(--color-fg)]">{hoveredCountry.country_name}</span>
                         {hoveredCountry.robust && (
-                          <span className="bg-[color:var(--color-accent-bg)] text-[color:var(--color-accent-hover)] px-1.5 py-0.5 rounded-sm text-[10px] font-medium uppercase tracking-wider">Robust</span>
+                          <span className="bg-[color:var(--color-accent-bg)] text-[color:var(--color-accent-hover)] px-1.5 py-0.5 rounded-[6px] text-[10px] font-medium uppercase tracking-wider">Robust</span>
                         )}
                       </div>
                       <div className="space-y-1 text-[color:var(--color-fg-muted)] font-mono tabular-nums">
@@ -901,19 +915,19 @@ export default function App() {
                     }} />
                     <span className="font-medium">High gap</span>
                     <span className="ml-4 flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-sm inline-block" style={{ background: '#7c3aed' }} />
+                      <span className="w-3 h-3 rounded-[6px] inline-block" style={{ background: '#7c3aed' }} />
                       <span className="font-medium">Robustly overlooked</span>
                     </span>
                     <span className="flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-sm inline-block bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)]" />
+                      <span className="w-3 h-3 rounded-[6px] inline-block bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)]" />
                       <span className="font-medium">No crisis data</span>
                     </span>
                   </div>
                 </div>
 
                 {/* ── PCA SCATTER ── */}
-                <div className="border border-[color:var(--color-border)] rounded-lg p-6 bg-[color:var(--color-surface)]">
-                  <h2 className="text-[22px] font-semibold tracking-tight text-[color:var(--color-fg)] leading-tight mb-1">Country Similarity Map (PCA)</h2>
+                <div className="border border-[color:var(--color-border)] rounded-[20px] p-8 bg-[color:var(--color-surface)]">
+                  <h2 className="font-serif text-[26px] font-normal tracking-[-0.01em] text-[color:var(--color-fg)] leading-tight mb-1">Country Similarity Map (PCA)</h2>
                   <p className="text-sm text-[color:var(--color-fg-muted)] mb-6">
                     Countries near each other share similar crisis profiles across all dimensions.
                     PC1 captures overall severity + gap · PC2 separates structural from acute neglect.
@@ -941,9 +955,9 @@ export default function App() {
                 </div>
 
                 {/* ── RANKINGS TABLE ── */}
-                <div className="border border-[color:var(--color-border)] rounded-lg overflow-hidden bg-[color:var(--color-surface)]">
+                <div className="border border-[color:var(--color-border)] rounded-[20px] overflow-hidden bg-[color:var(--color-surface)]">
                   <div className="px-6 py-5 border-b border-[color:var(--color-border)]">
-                    <h2 className="text-[22px] font-semibold tracking-tight text-[color:var(--color-fg)] leading-tight">Full Rankings — {displayYear}</h2>
+                    <h2 className="font-serif text-[26px] font-normal tracking-[-0.01em] text-[color:var(--color-fg)] leading-tight">Full Rankings — {displayYear}</h2>
                     <p className="text-sm text-[color:var(--color-fg-muted)] mt-1">
                       Bar = gap component (colour) + structural bonus (purple). Borda validates across 4 independent methods.
                     </p>
@@ -973,8 +987,8 @@ export default function App() {
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-[color:var(--color-fg)] text-sm font-medium">{r.country_name}</span>
-                                {r.robust && <span className="text-[10px] font-medium uppercase tracking-wider bg-[color:var(--color-accent-bg)] text-[color:var(--color-accent-hover)] px-1.5 py-0.5 rounded-sm">Robust</span>}
-                                {!r.data_complete && <span className="text-[10px] font-medium uppercase tracking-wider border border-[color:var(--color-border-strong)] text-[color:var(--color-fg-muted)] px-1.5 py-0.5 rounded-sm">Partial</span>}
+                                {r.robust && <span className="text-[10px] font-medium uppercase tracking-wider bg-[color:var(--color-accent-bg)] text-[color:var(--color-accent-hover)] px-1.5 py-0.5 rounded-[6px]">Robust</span>}
+                                {!r.data_complete && <span className="text-[10px] font-medium uppercase tracking-wider border border-[color:var(--color-border-strong)] text-[color:var(--color-fg-muted)] px-1.5 py-0.5 rounded-[6px]">Partial</span>}
                               </div>
                               <div className="text-xs text-[color:var(--color-fg-subtle)] mt-0.5">{r.region_name}</div>
                             </td>
@@ -1048,44 +1062,48 @@ export default function App() {
           return (
           <div className="flex flex-col gap-5 max-w-5xl mx-auto w-full">
 
-            {/* ── Prompt card ─────────────────────────────────────────────── */}
-            <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg p-5 flex flex-col gap-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[color:var(--color-fg-muted)]">Describe your mandate</p>
-              <form onSubmit={handleAnalyze} className="flex gap-3 items-start">
-                <textarea
-                  className="flex-1 bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] rounded-lg px-4 py-3 text-[color:var(--color-fg)] placeholder:text-[color:var(--color-fg-subtle)] focus:outline-none focus:border-[color:var(--color-accent)] resize-none text-sm leading-relaxed"
-                  rows={2}
-                  placeholder={typewriter}
-                  value={aPrompt}
-                  onChange={e => setAPrompt(e.target.value)}
-                />
-                <div className="flex flex-col gap-2 shrink-0 min-w-[220px]">
-                  <select className="bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] rounded-lg px-3 py-2 text-[color:var(--color-fg)] text-sm"
-                    value={aSector} onChange={e => setASector(e.target.value)}>
-                    {SECTOR_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                  </select>
-                  <input
-                    className="bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] rounded-lg px-3 py-2 text-[color:var(--color-fg)] text-sm placeholder:text-[color:var(--color-fg-subtle)] focus:outline-none focus:border-[color:var(--color-accent)]"
-                    placeholder="Focus country, e.g. Brazil or BRA (optional)"
-                    value={aFocusRaw}
-                    onChange={e => setAFocusRaw(e.target.value)}
+            {/* ── Prompt card: glass floating over a soft radial backdrop ─── */}
+            <div className="relative rounded-[32px] p-2"
+              style={{
+                background: 'radial-gradient(ellipse 80% 100% at 50% 0%, rgba(13,148,136,0.10) 0%, rgba(13,148,136,0.04) 35%, transparent 75%)',
+              }}>
+              <div className="glass rounded-[28px] p-8 flex flex-col gap-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--color-fg-muted)]">Describe your mandate</p>
+                <form onSubmit={handleAnalyze} className="flex gap-3 items-start">
+                  <textarea
+                    className="flex-1 bg-white/60 border border-[color:var(--color-border)] rounded-[12px] px-4 py-3 text-[color:var(--color-fg)] placeholder:text-[color:var(--color-fg-subtle)] focus:outline-none focus:border-[color:var(--color-accent)] resize-none text-sm leading-relaxed"
+                    rows={2}
+                    placeholder={typewriter}
+                    value={aPrompt}
+                    onChange={e => setAPrompt(e.target.value)}
                   />
-                  <button type="submit" disabled={aLoading || !aPrompt.trim()}
-                    className="bg-[color:var(--color-accent)] hover:bg-[color:var(--color-accent-hover)] disabled:bg-[color:var(--color-border)] disabled:text-[color:var(--color-fg-subtle)] disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
-                    {aLoading ? '…' : 'Analyze →'}
-                  </button>
-                </div>
-              </form>
-
+                  <div className="flex flex-col gap-2 shrink-0 min-w-[220px]">
+                    <select className="bg-white/60 border border-[color:var(--color-border)] rounded-[12px] px-3 py-2 text-[color:var(--color-fg)] text-sm"
+                      value={aSector} onChange={e => setASector(e.target.value)}>
+                      {SECTOR_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                    </select>
+                    <input
+                      className="bg-white/60 border border-[color:var(--color-border)] rounded-[12px] px-3 py-2 text-[color:var(--color-fg)] text-sm placeholder:text-[color:var(--color-fg-subtle)] focus:outline-none focus:border-[color:var(--color-accent)]"
+                      placeholder="Focus country, e.g. Brazil or BRA (optional)"
+                      value={aFocusRaw}
+                      onChange={e => setAFocusRaw(e.target.value)}
+                    />
+                    <button type="submit" disabled={aLoading || !aPrompt.trim()}
+                      className="btn-primary px-4 py-2 rounded-[12px] text-sm font-medium">
+                      {aLoading ? '…' : 'Analyze →'}
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
 
-            {aError && <div className="bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] text-[color:var(--color-fg)] rounded-lg px-4 py-3 text-sm">{aError}</div>}
+            {aError && <div className="bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] text-[color:var(--color-fg)] rounded-[12px] px-4 py-3 text-sm">{aError}</div>}
             {aLoading && <div className="flex items-center justify-center py-16 text-[color:var(--color-fg-subtle)] text-sm">Scoring all countries against your priorities…</div>}
 
             {aResult && (
               <>
                 {/* ── Priority tags + refine ───────────────────────────── */}
-                <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg p-5">
+                <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[20px] p-7">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-xs text-[color:var(--color-fg-muted)] uppercase tracking-wide font-medium">How I understood your priorities</p>
                     <span className="text-xs text-[color:var(--color-fg-subtle)] font-mono">score = Σ(weight × dim) &nbsp;·&nbsp; weight = imp²/Σ(imp²)</span>
@@ -1134,7 +1152,7 @@ export default function App() {
                     const sorted = Object.entries(aResult.weights).sort((a, b) => b[1] - a[1])
                     const total = sorted.reduce((s, [, w]) => s + w, 0) || 1
                     return (
-                      <div className="mb-4 p-3 bg-[color:var(--color-surface-muted)] rounded-lg">
+                      <div className="mb-4 p-3 bg-[color:var(--color-surface-muted)] rounded-[12px]">
                         <div className="flex items-center justify-between mb-2">
                           <p className="text-xs text-[color:var(--color-fg-subtle)]">How weight distributes across your 12 dimensions</p>
                           <p className="text-xs text-[color:var(--color-fg-subtle)] font-mono">weight = imp² / Σ(imp²)</p>
@@ -1150,7 +1168,7 @@ export default function App() {
                           {sorted.filter(([, w]) => w / total >= 0.04).map(([k, w]) => (
                             <span key={k} className="text-xs text-[color:var(--color-fg-muted)] flex items-center gap-1"
                               title={DIM_META[k]?.desc}>
-                              <span className="w-2 h-2 rounded-sm shrink-0 inline-block"
+                              <span className="w-2 h-2 rounded-[6px] shrink-0 inline-block"
                                 style={{ background: DIM_COLORS[k] ?? '#a1a1aa' }} />
                               {dimLabel(k)} <span className="font-mono text-[color:var(--color-fg-subtle)]">{(w / total * 100).toFixed(0)}%</span>
                             </span>
@@ -1174,7 +1192,7 @@ export default function App() {
                       What do these 12 metrics measure?
                     </button>
                     {showGlossary && (
-                      <div className="mt-2 rounded-lg overflow-hidden border border-[color:var(--color-border)]">
+                      <div className="mt-2 rounded-[12px] overflow-hidden border border-[color:var(--color-border)]">
                         <table className="w-full text-xs">
                           <thead className="bg-[color:var(--color-surface-muted)]">
                             <tr>
@@ -1188,7 +1206,7 @@ export default function App() {
                             {Object.entries(DIM_META).map(([k, m]) => (
                               <tr key={k} className="hover:bg-[color:var(--color-surface-muted)]/30">
                                 <td className="px-3 py-2">
-                                  <span className="w-2.5 h-2.5 rounded-sm inline-block"
+                                  <span className="w-2.5 h-2.5 rounded-[6px] inline-block"
                                     style={{ background: DIM_COLORS[k] ?? '#a1a1aa' }} />
                                 </td>
                                 <td className="px-3 py-2">
@@ -1207,13 +1225,13 @@ export default function App() {
 
                   <form onSubmit={handleRefine} className="flex gap-2">
                     <input
-                      className="flex-1 bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] rounded-lg px-3 py-2 text-sm text-[color:var(--color-fg)] placeholder:text-[color:var(--color-fg-subtle)] focus:outline-none focus:border-[color:var(--color-accent)]"
+                      className="flex-1 bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] rounded-[12px] px-3 py-2 text-sm text-[color:var(--color-fg)] placeholder:text-[color:var(--color-fg-subtle)] focus:outline-none focus:border-[color:var(--color-accent)]"
                       placeholder="Not right? Refine: e.g. make water more important, I don't care about governance"
                       value={aRefine}
                       onChange={e => setARefine(e.target.value)}
                     />
                     <button type="submit" disabled={aLoading || !aRefine.trim()}
-                      className="bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-[color:var(--color-fg)] px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">
+                      className="bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-[color:var(--color-fg)] px-4 py-2 rounded-[12px] text-sm font-medium whitespace-nowrap">
                       {aLoading ? '…' : 'Refine ↩'}
                     </button>
                   </form>
@@ -1222,14 +1240,14 @@ export default function App() {
                 {/* ── Inverse query + compare controls ─────────────────── */}
                 <div className="flex gap-3 items-center">
                   <input
-                    className="flex-1 bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg px-3 py-2 text-sm text-[color:var(--color-fg)] placeholder:text-[color:var(--color-fg-subtle)] focus:outline-none focus:border-[color:var(--color-accent)]"
+                    className="flex-1 bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[12px] px-3 py-2 text-sm text-[color:var(--color-fg)] placeholder:text-[color:var(--color-fg-subtle)] focus:outline-none focus:border-[color:var(--color-accent)]"
                     placeholder="Find a country — type name or ISO3 to see where it ranks…"
                     value={aSearch}
                     onChange={e => setASearch(e.target.value)}
                   />
                   {aCompare.size > 0 && (
                     <button onClick={() => setACompare(new Set())}
-                      className="text-xs text-[color:var(--color-fg-muted)] hover:text-[color:var(--color-fg)] border border-[color:var(--color-border)] rounded-lg px-3 py-2 whitespace-nowrap">
+                      className="text-xs text-[color:var(--color-fg-muted)] hover:text-[color:var(--color-fg)] border border-[color:var(--color-border)] rounded-[20px] px-3 py-2 whitespace-nowrap">
                       Clear compare ({aCompare.size})
                     </button>
                   )}
@@ -1252,7 +1270,7 @@ export default function App() {
                   const [iso, rank] = match
                   const name = aResult.ranked.find(r => r.country_iso3 === iso)?.country_name ?? iso
                   return (
-                    <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg px-4 py-3 text-sm flex items-center justify-between">
+                    <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[20px] px-4 py-3 text-sm flex items-center justify-between">
                       <span className="text-[color:var(--color-fg)]">
                         <span className="font-semibold text-[color:var(--color-fg)]">{name}</span> ranks
                         <span className="font-mono text-[color:var(--color-fg-muted)] mx-1">#{rank}</span>
@@ -1276,7 +1294,7 @@ export default function App() {
                   if (!proConError && !notResolved) return null
                   const label = aFocusRaw.trim()
                   return (
-                    <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg px-5 py-4 flex items-start gap-3">
+                    <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[20px] px-5 py-4 flex items-start gap-3">
                       <span className="text-[color:var(--color-fg-muted)] text-lg shrink-0">⚠</span>
                       <div>
                         <p className="text-sm font-semibold text-[color:var(--color-fg)] mb-1">
@@ -1325,7 +1343,7 @@ export default function App() {
                     .slice(0, 3)
 
                   return (
-                    <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg overflow-hidden">
+                    <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[20px] overflow-hidden">
                       {/* Header */}
                       <div className="px-5 py-3 border-b border-[color:var(--color-border)] flex items-center justify-between bg-[color:var(--color-surface-muted)]">
                         <div className="flex items-center gap-3 flex-wrap">
@@ -1357,7 +1375,7 @@ export default function App() {
                             { l: 'Requirements', v: `$${millions(pc.requirements_usd)}`, c: 'text-[color:var(--color-fg)]' },
                             { l: 'Yrs underfunded', v: pc.years_underfunded != null ? String(pc.years_underfunded) : '—', c: 'text-[color:var(--color-accent-hover)]' },
                           ].map(m => (
-                            <div key={m.l} className="bg-[color:var(--color-surface-muted)] rounded-lg p-2.5 text-center">
+                            <div key={m.l} className="bg-[color:var(--color-surface-muted)] rounded-[12px] p-2.5 text-center">
                               <div className={`text-sm font-bold ${m.c}`}>{m.v}</div>
                               <div className="text-xs text-[color:var(--color-fg-subtle)] mt-0.5">{m.l}</div>
                             </div>
@@ -1366,13 +1384,13 @@ export default function App() {
 
                         {/* Why fund / Why not — split LLM narrative */}
                         <div className="grid grid-cols-2 gap-3">
-                          <div className="bg-[color:var(--color-accent-bg)]/20 border border-[color:var(--color-accent)]/40 rounded-lg p-4">
+                          <div className="bg-[color:var(--color-accent-bg)]/20 border border-[color:var(--color-accent)]/40 rounded-[12px] p-4">
                             <p className="text-xs font-bold text-[color:var(--color-accent)] mb-2 flex items-center gap-1.5">
                               <span>✓</span> Why you should fund {pc.country_name}
                             </p>
                             <p className="text-xs text-[color:var(--color-fg)] leading-relaxed">{pc.why_fund}</p>
                           </div>
-                          <div className="bg-[color:var(--color-surface-muted)]/20 border border-red-900/40 rounded-lg p-4">
+                          <div className="bg-[color:var(--color-surface-muted)]/20 border border-red-900/40 rounded-[12px] p-4">
                             <p className="text-xs font-bold text-[color:var(--color-fg)] mb-2 flex items-center gap-1.5">
                               <span>✗</span> Why you might not
                             </p>
@@ -1382,14 +1400,14 @@ export default function App() {
 
                         {/* Better alternatives (when weak/mixed case and we have ranked alternatives) */}
                         {betterAlts.length > 0 && rankPct > 0.15 && (
-                          <div className="bg-[color:var(--color-surface-muted)] rounded-lg px-4 py-3 flex items-center gap-3 flex-wrap">
+                          <div className="bg-[color:var(--color-surface-muted)] rounded-[12px] px-4 py-3 flex items-center gap-3 flex-wrap">
                             <span className="text-xs text-[color:var(--color-fg-muted)] shrink-0">
                               Stronger alternatives for your mandate:
                             </span>
                             {betterAlts.map(r => (
                               <button key={r.country_iso3}
                                 onClick={() => handleFocusCountry(r.country_iso3)}
-                                className="text-xs bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded-lg px-3 py-1.5 text-[color:var(--color-fg)] transition-colors flex items-center gap-1.5">
+                                className="text-xs bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded-[12px] px-3 py-1.5 text-[color:var(--color-fg)] transition-colors flex items-center gap-1.5">
                                 <span className="font-mono text-[color:var(--color-fg-muted)]">#{r.mcda_rank}</span>
                                 {r.country_name}
                               </button>
@@ -1397,73 +1415,99 @@ export default function App() {
                           </div>
                         )}
 
-                        {/* ═══ DIMENSION DETAIL — strengths / weaknesses ═══ */}
+                        {/* ═══ DIMENSION DETAIL — glass strengths / weaknesses over tinted backdrops ═══ */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-                          {/* ── STRENGTHS — teal left edge, up-arrow rows ───── */}
-                          <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg overflow-hidden" style={{ borderLeft: '4px solid var(--color-accent)' }}>
-                            <div className="px-4 py-2.5 border-b border-[color:var(--color-border)] flex items-baseline justify-between bg-[color:var(--color-accent-bg)]">
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[color:var(--color-accent-hover)]">Strengths on your criteria</p>
-                              <p className="text-[11px] text-[color:var(--color-fg-subtle)] font-mono">{pc.pros.length} dims</p>
+                          {/* ── STRENGTHS — teal glass over soft teal radial ─── */}
+                          <div className="relative rounded-[24px] p-1.5"
+                            style={{
+                              background: 'radial-gradient(ellipse 90% 100% at 0% 50%, rgba(13,148,136,0.14) 0%, rgba(13,148,136,0.04) 50%, transparent 85%)',
+                            }}>
+                            <div
+                              className="glass rounded-[20px] overflow-hidden"
+                              style={{
+                                borderLeft: '3px solid var(--color-accent)',
+                                background: 'linear-gradient(135deg, rgba(240,253,250,0.72) 0%, rgba(255,255,255,0.72) 40%)',
+                              }}>
+                              <div className="px-4 py-2.5 flex items-baseline justify-between"
+                                style={{ borderBottom: '1px solid rgba(228,228,231,0.5)', background: 'rgba(240,253,250,0.6)' }}>
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--color-accent-hover)]">Strengths on your criteria</p>
+                                <p className="text-[11px] text-[color:var(--color-fg-subtle)] font-mono">{pc.pros.length} dims</p>
+                              </div>
+                              {pc.pros.length === 0 ? (
+                                <p className="px-4 py-4 text-xs text-[color:var(--color-fg-subtle)] italic">No strong signals on your weighted dimensions.</p>
+                              ) : (
+                                <ul>
+                                  {[...pc.pros]
+                                    .sort((a, b) => (b.weight * (b.value ?? 0)) - (a.weight * (a.value ?? 0)))
+                                    .slice(0, 4)
+                                    .map((c, i) => (
+                                      <li key={c.dimension}
+                                        className="px-4 py-3"
+                                        style={i > 0 ? { borderTop: '1px solid rgba(228,228,231,0.5)' } : undefined}>
+                                        <div className="flex items-center gap-2">
+                                          <span className="shrink-0 text-sm leading-none text-[color:var(--color-accent)]">▲</span>
+                                          <span className="text-sm font-semibold text-[color:var(--color-fg)]">{c.label}</span>
+                                          <span className="ml-auto shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] font-mono text-[color:var(--color-accent-hover)]">
+                                            top {Math.round((1 - c.percentile) * 100)}%
+                                          </span>
+                                        </div>
+                                        <p className="text-xs text-[color:var(--color-fg-muted)] leading-relaxed mt-1 pl-5">{c.narrative}</p>
+                                      </li>
+                                    ))}
+                                </ul>
+                              )}
                             </div>
-                            {pc.pros.length === 0 ? (
-                              <p className="px-4 py-4 text-xs text-[color:var(--color-fg-subtle)] italic">No strong signals on your weighted dimensions.</p>
-                            ) : (
-                              <ul className="divide-y divide-[color:var(--color-border)]">
-                                {[...pc.pros]
-                                  .sort((a, b) => (b.weight * (b.value ?? 0)) - (a.weight * (a.value ?? 0)))
-                                  .slice(0, 4)
-                                  .map(c => (
-                                    <li key={c.dimension} className="px-4 py-3">
-                                      <div className="flex items-center gap-2">
-                                        <span className="shrink-0 text-sm leading-none text-[color:var(--color-accent)]">▲</span>
-                                        <span className="text-sm font-semibold text-[color:var(--color-fg)]">{c.label}</span>
-                                        <span className="ml-auto shrink-0 text-[11px] font-semibold uppercase tracking-[0.06em] font-mono text-[color:var(--color-accent-hover)]">
-                                          top {Math.round((1 - c.percentile) * 100)}%
-                                        </span>
-                                      </div>
-                                      <p className="text-xs text-[color:var(--color-fg-muted)] leading-relaxed mt-1 pl-5">{c.narrative}</p>
-                                    </li>
-                                  ))}
-                              </ul>
-                            )}
                           </div>
 
-                          {/* ── WEAKNESSES — red right edge, down-arrow rows ─── */}
-                          <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg overflow-hidden" style={{ borderRight: '4px solid #dc2626' }}>
-                            <div className="px-4 py-2.5 border-b border-[color:var(--color-border)] flex items-baseline justify-between bg-[#fef2f2]">
-                              <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: '#b91c1c' }}>Weaknesses on your criteria</p>
-                              <p className="text-[11px] text-[color:var(--color-fg-subtle)] font-mono">{pc.cons.length} dims</p>
+                          {/* ── WEAKNESSES — red glass over soft rose radial ─── */}
+                          <div className="relative rounded-[24px] p-1.5"
+                            style={{
+                              background: 'radial-gradient(ellipse 90% 100% at 100% 50%, rgba(220,38,38,0.12) 0%, rgba(220,38,38,0.03) 50%, transparent 85%)',
+                            }}>
+                            <div
+                              className="glass rounded-[20px] overflow-hidden"
+                              style={{
+                                borderRight: '3px solid #dc2626',
+                                background: 'linear-gradient(225deg, rgba(254,242,242,0.72) 0%, rgba(255,255,255,0.72) 40%)',
+                              }}>
+                              <div className="px-4 py-2.5 flex items-baseline justify-between"
+                                style={{ borderBottom: '1px solid rgba(228,228,231,0.5)', background: 'rgba(254,242,242,0.6)' }}>
+                                <p className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: '#b91c1c' }}>Weaknesses on your criteria</p>
+                                <p className="text-[11px] text-[color:var(--color-fg-subtle)] font-mono">{pc.cons.length} dims</p>
+                              </div>
+                              {pc.cons.length === 0 ? (
+                                <p className="px-4 py-4 text-xs text-[color:var(--color-fg-subtle)] italic">No significant weaknesses on your weighted dimensions.</p>
+                              ) : (
+                                <ul>
+                                  {[...pc.cons]
+                                    .sort((a, b) => (b.weight * (1 - (b.value ?? 1))) - (a.weight * (1 - (a.value ?? 1))))
+                                    .slice(0, 4)
+                                    .map((c, i) => (
+                                      <li key={c.dimension}
+                                        className="px-4 py-3"
+                                        style={i > 0 ? { borderTop: '1px solid rgba(228,228,231,0.5)' } : undefined}>
+                                        <div className="flex items-center gap-2">
+                                          <span className="shrink-0 text-sm leading-none" style={{ color: '#dc2626' }}>▼</span>
+                                          <span className="text-sm font-semibold text-[color:var(--color-fg)]">{c.label}</span>
+                                          <span className="ml-auto shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] font-mono" style={{ color: '#b91c1c' }}>
+                                            btm {Math.round(c.percentile * 100)}%
+                                          </span>
+                                        </div>
+                                        <p className="text-xs text-[color:var(--color-fg-muted)] leading-relaxed mt-1 pl-5">{c.narrative}</p>
+                                        {c.better_country && (
+                                          <p className="text-xs text-[color:var(--color-fg-subtle)] mt-1 pl-5">
+                                            <span className="font-medium text-[color:var(--color-fg-muted)]">{c.better_country.country_name}</span> leads here
+                                            {c.better_country.value != null && c.value != null
+                                              ? <> (<span className="font-mono tabular-nums">{(c.better_country.value * 10).toFixed(1)}</span> vs <span className="font-mono tabular-nums">{(c.value * 10).toFixed(1)}</span>)</>
+                                              : null}.
+                                          </p>
+                                        )}
+                                      </li>
+                                    ))}
+                                </ul>
+                              )}
                             </div>
-                            {pc.cons.length === 0 ? (
-                              <p className="px-4 py-4 text-xs text-[color:var(--color-fg-subtle)] italic">No significant weaknesses on your weighted dimensions.</p>
-                            ) : (
-                              <ul className="divide-y divide-[color:var(--color-border)]">
-                                {[...pc.cons]
-                                  .sort((a, b) => (b.weight * (1 - (b.value ?? 1))) - (a.weight * (1 - (a.value ?? 1))))
-                                  .slice(0, 4)
-                                  .map(c => (
-                                    <li key={c.dimension} className="px-4 py-3">
-                                      <div className="flex items-center gap-2">
-                                        <span className="shrink-0 text-sm leading-none" style={{ color: '#dc2626' }}>▼</span>
-                                        <span className="text-sm font-semibold text-[color:var(--color-fg)]">{c.label}</span>
-                                        <span className="ml-auto shrink-0 text-[11px] font-semibold uppercase tracking-[0.06em] font-mono" style={{ color: '#b91c1c' }}>
-                                          btm {Math.round(c.percentile * 100)}%
-                                        </span>
-                                      </div>
-                                      <p className="text-xs text-[color:var(--color-fg-muted)] leading-relaxed mt-1 pl-5">{c.narrative}</p>
-                                      {c.better_country && (
-                                        <p className="text-xs text-[color:var(--color-fg-subtle)] mt-1 pl-5">
-                                          <span className="font-medium text-[color:var(--color-fg-muted)]">{c.better_country.country_name}</span> leads here
-                                          {c.better_country.value != null && c.value != null
-                                            ? <> (<span className="font-mono tabular-nums">{(c.better_country.value * 10).toFixed(1)}</span> vs <span className="font-mono tabular-nums">{(c.value * 10).toFixed(1)}</span>)</>
-                                            : null}.
-                                        </p>
-                                      )}
-                                    </li>
-                                  ))}
-                              </ul>
-                            )}
                           </div>
                         </div>
 
@@ -1518,7 +1562,7 @@ export default function App() {
                 })()}
 
                 {/* ── Ranked table ──────────────────────────────────────── */}
-                <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg overflow-hidden">
+                <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[20px] overflow-hidden">
                   <div className="px-5 py-3 border-b border-[color:var(--color-border)] flex items-center justify-between">
                     <div>
                       <p className="text-sm font-semibold text-[color:var(--color-fg)]">
@@ -1532,7 +1576,7 @@ export default function App() {
                       <p className="text-xs text-[color:var(--color-fg-subtle)] mt-0.5">Sort by header · click row to analyze · checkbox to compare</p>
                     </div>
                     {aCompare.size >= 2 && (
-                      <span className="text-xs text-[color:var(--color-accent)] border border-[color:var(--color-border)] bg-[color:var(--color-accent-bg)] px-2 py-1 rounded-lg">
+                      <span className="text-xs text-[color:var(--color-accent)] border border-[color:var(--color-border)] bg-[color:var(--color-accent-bg)] px-2 py-1 rounded-[12px]">
                         {aCompare.size} selected for comparison ↓
                       </span>
                     )}
@@ -1647,7 +1691,7 @@ export default function App() {
                   const allDims = Object.keys(aResult.importance_scores)
                     .sort((a, b) => aResult.importance_scores[b] - aResult.importance_scores[a])
                   return (
-                    <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg overflow-hidden">
+                    <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[20px] overflow-hidden">
                       <div className="px-5 py-3 border-b border-[color:var(--color-border)] flex items-center justify-between">
                         <p className="text-sm font-semibold text-[color:var(--color-fg)]">Side-by-side comparison</p>
                         <button onClick={() => setACompare(new Set())} className="text-xs text-[color:var(--color-fg-subtle)] hover:text-[color:var(--color-fg-muted)]">Clear</button>
@@ -1711,7 +1755,7 @@ export default function App() {
 
                 {/* ── Metric leaders (no country pinned) ────────────────── */}
                 {!pc && aResult.dimension_leaders.length > 0 && (
-                  <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg overflow-hidden">
+                  <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[20px] overflow-hidden">
                     <div className="px-5 py-3 border-b border-[color:var(--color-border)]">
                       <p className="text-sm font-semibold text-[color:var(--color-fg)]">Who leads each metric</p>
                       <p className="text-xs text-[color:var(--color-fg-subtle)] mt-0.5">Click to expand pro/con for that country</p>
@@ -1763,52 +1807,60 @@ export default function App() {
         {/* ═══ QUERY TAB ═══════════════════════════════════════════════════ */}
         {tab === 'query' && (
           <div className="flex flex-col gap-6">
-            <form onSubmit={handleQuery} className="flex flex-col gap-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[color:var(--color-fg-muted)]">Ask a question</p>
-              <textarea
-                className="w-full bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg px-4 py-3 text-[color:var(--color-fg)] placeholder:text-[color:var(--color-fg-subtle)] focus:outline-none focus:border-[color:var(--color-accent)] resize-none text-sm"
-                rows={2}
-                placeholder={sqlTypewriter}
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-              />
-              <div className="flex items-center gap-4 flex-wrap">
-                {['from','to'].map((label, idx) => (
-                  <label key={label} className="text-sm text-[color:var(--color-fg-muted)] flex items-center gap-2">
-                    Year {label}
-                    <select className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded px-2 py-1 text-[color:var(--color-fg)] text-sm"
-                      value={idx === 0 ? yearFrom : yearTo}
-                      onChange={e => idx === 0 ? setYearFrom(Number(e.target.value)) : setYearTo(Number(e.target.value))}>
-                      {YEARS.map(y => <option key={y}>{y}</option>)}
-                    </select>
-                  </label>
-                ))}
-                <label className="text-sm text-[color:var(--color-fg-muted)] flex items-center gap-2 ml-auto">
-                  <input type="checkbox" checked={showSql} onChange={e => setShowSql(e.target.checked)} className="accent-[color:var(--color-accent)]" />
-                  Show SQL
-                </label>
-                <button type="submit" disabled={qLoading || !query.trim()}
-                  className="bg-[color:var(--color-accent)] hover:bg-[color:var(--color-accent-hover)] disabled:bg-[color:var(--color-border)] disabled:text-[color:var(--color-fg-subtle)] disabled:cursor-not-allowed text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors">
-                  {qLoading ? 'Analysing…' : 'Analyse'}
-                </button>
+            {/* Glass prompt card over soft radial backdrop — mirrors the Prioritize tab */}
+            <div className="relative rounded-[32px] p-2"
+              style={{
+                background: 'radial-gradient(ellipse 80% 100% at 50% 0%, rgba(13,148,136,0.10) 0%, rgba(13,148,136,0.04) 35%, transparent 75%)',
+              }}>
+              <div className="glass rounded-[28px] p-8 flex flex-col gap-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--color-fg-muted)]">Ask a question</p>
+                <form onSubmit={handleQuery} className="flex flex-col gap-4">
+                  <textarea
+                    className="w-full bg-white/60 border border-[color:var(--color-border)] rounded-[12px] px-4 py-3 text-[color:var(--color-fg)] placeholder:text-[color:var(--color-fg-subtle)] focus:outline-none focus:border-[color:var(--color-accent)] resize-none text-sm leading-relaxed"
+                    rows={2}
+                    placeholder={sqlTypewriter}
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                  />
+                  <div className="flex items-center gap-4 flex-wrap">
+                    {['from','to'].map((label, idx) => (
+                      <label key={label} className="text-sm text-[color:var(--color-fg-muted)] flex items-center gap-2">
+                        Year {label}
+                        <select className="bg-white/60 border border-[color:var(--color-border)] rounded-[10px] px-2 py-1 text-[color:var(--color-fg)] text-sm"
+                          value={idx === 0 ? yearFrom : yearTo}
+                          onChange={e => idx === 0 ? setYearFrom(Number(e.target.value)) : setYearTo(Number(e.target.value))}>
+                          {YEARS.map(y => <option key={y}>{y}</option>)}
+                        </select>
+                      </label>
+                    ))}
+                    <label className="text-sm text-[color:var(--color-fg-muted)] flex items-center gap-2 ml-auto">
+                      <input type="checkbox" checked={showSql} onChange={e => setShowSql(e.target.checked)} className="accent-[color:var(--color-accent)]" />
+                      Show SQL
+                    </label>
+                    <button type="submit" disabled={qLoading || !query.trim()}
+                      className="btn-primary px-6 py-2 rounded-[12px] text-sm font-medium">
+                      {qLoading ? 'Analysing…' : 'Analyse'}
+                    </button>
+                  </div>
+                </form>
               </div>
-            </form>
+            </div>
 
-            {qError && <div className="bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] text-[color:var(--color-fg)] rounded-lg px-4 py-3 text-sm">{qError}</div>}
+            {qError && <div className="bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] text-[color:var(--color-fg)] rounded-[12px] px-4 py-3 text-sm">{qError}</div>}
 
             {qResult && (
               <div className="flex flex-col gap-6">
                 {showSql && (
-                  <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg p-4">
+                  <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[20px] p-4">
                     <p className="text-xs text-[color:var(--color-fg-muted)] mb-2 uppercase tracking-wide font-medium">Generated SQL</p>
-                    <pre className="text-xs font-mono tabular-nums text-[color:var(--color-fg)] bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] rounded-md p-4 overflow-x-auto whitespace-pre-wrap">{qResult.sql}</pre>
+                    <pre className="text-xs font-mono tabular-nums text-[color:var(--color-fg)] bg-[color:var(--color-surface-muted)] border border-[color:var(--color-border)] rounded-[10px] p-4 overflow-x-auto whitespace-pre-wrap">{qResult.sql}</pre>
                   </div>
                 )}
                 <p className="text-sm text-[color:var(--color-fg-muted)]">{qResult.row_count} rows returned</p>
 
                 {/* World map for query results */}
                 {Object.keys(qIsoMap).length > 0 && (
-                  <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg p-6">
+                  <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[20px] p-8">
                     <p className="text-xs font-semibold text-[color:var(--color-fg-muted)] mb-3 uppercase tracking-wide">Result Countries</p>
                     <ComposableMap projectionConfig={{ scale: 153 }}>
                       <Geographies geography={GEO_URL}>
@@ -1831,7 +1883,7 @@ export default function App() {
                 )}
 
                 {/* Results table */}
-                <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-lg overflow-hidden">
+                <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[20px] overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead className="text-[color:var(--color-fg-muted)] text-xs uppercase border-b border-[color:var(--color-border)]">
@@ -1862,12 +1914,6 @@ export default function App() {
               </div>
             )}
 
-            {!qResult && !qLoading && !qError && (
-              <div className="mt-20 text-center text-[color:var(--color-fg-subtle)]">
-                <p className="text-4xl mb-4">🔍</p>
-                <p className="text-sm text-[color:var(--color-fg-muted)]">Try: <em className="text-[color:var(--color-fg-muted)]">Which countries have more than 5M people in need but under 30% funded?</em></p>
-              </div>
-            )}
           </div>
         )}
       </main>
