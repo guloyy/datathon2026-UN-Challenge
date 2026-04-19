@@ -104,6 +104,9 @@ class AnalyzeResponse(BaseModel):
     pro_con: Optional[Dict[str, Any]] = None
     dimension_leaders: List[Dict[str, Any]]
     full_rank_map: Dict[str, int]
+    name_map: Dict[str, str]
+    extracted_country: Optional[str] = None
+    extracted_sector: Optional[str] = None
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -203,6 +206,9 @@ def analyze(req: AnalyzeRequest):
     """
     from src.analysis.mcda_analyzer import extract_weights, weights_from_scores, score_all, build_pro_con, DIMENSIONS
 
+    extracted_country: str | None = None
+    extracted_sector: str | None = None
+
     if req.force_scores:
         # Direct re-score — skip LLM entirely
         importance_scores = {k: max(1, min(10, v)) for k, v in req.force_scores.items()}
@@ -216,7 +222,7 @@ def analyze(req: AnalyzeRequest):
         interpretation = "Default analysis: all dimensions weighted equally."
     else:
         try:
-            weights, importance_scores, interpretation = extract_weights(
+            weights, importance_scores, interpretation, extracted_country, extracted_sector = extract_weights(
                 req.prompt, previous_scores=req.previous_scores
             )
         except RuntimeError as e:
@@ -241,10 +247,17 @@ def analyze(req: AnalyzeRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Scoring failed: {e}")
 
-    # Full rank lookup for every country (enables inverse query on frontend)
+    # Full rank + name lookup for every country (enables inverse query on frontend)
+    _all = scored[["country_iso3", "country_name", "mcda_rank"]].to_dict(orient="records")
     full_rank_map = {
         str(r["country_iso3"]): int(r["mcda_rank"])
-        for r in scored[["country_iso3", "mcda_rank"]].to_dict(orient="records")
+        for r in _all
+        if r["mcda_rank"] is not None and r["mcda_rank"] == r["mcda_rank"]
+    }
+    name_map = {
+        str(r["country_iso3"]): str(r["country_name"])
+        for r in _all
+        if r["country_iso3"] is not None
     }
 
     # Columns to expose in ranked list
@@ -272,6 +285,7 @@ def analyze(req: AnalyzeRequest):
                 user_prompt=req.prompt,
             )
         except Exception as e:
+            import traceback; traceback.print_exc()
             pro_con = {"error": str(e)}
 
     # Dimension leaders: top country on each individual metric
@@ -293,7 +307,7 @@ def analyze(req: AnalyzeRequest):
             "country_name": leader_row["country_name"],
             "value":        round(v, 3) if math.isfinite(v) else None,
             "percentile":   1.0,
-            "mcda_rank":    int(leader_row["mcda_rank"]),
+            "mcda_rank":    int(leader_row["mcda_rank"]) if pd.notna(leader_row["mcda_rank"]) else None,
         }))
 
     return AnalyzeResponse(
@@ -307,6 +321,9 @@ def analyze(req: AnalyzeRequest):
         pro_con=_san(pro_con),
         dimension_leaders=dimension_leaders,
         full_rank_map=full_rank_map,
+        name_map=name_map,
+        extracted_country=extracted_country,
+        extracted_sector=extracted_sector,
     )
 
 

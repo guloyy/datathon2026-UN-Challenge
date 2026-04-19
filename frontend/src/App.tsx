@@ -140,6 +140,9 @@ interface AnalyzeResponse {
   pro_con: ProConResult | { error: string } | null
   dimension_leaders: DimLeader[]
   full_rank_map: Record<string, number>
+  name_map: Record<string, string>
+  extracted_country?: string | null
+  extracted_sector?: string | null
 }
 
 // ── Dimension metadata (mirrors mcda_analyzer.py DIMENSIONS) ─────────────────
@@ -429,7 +432,12 @@ export default function App() {
     const nameMatch = result.ranked.find(r =>
       r.country_name.toUpperCase().includes(q) || r.country_iso3 === q)
     if (nameMatch) return nameMatch.country_iso3
-    return q.length === 3 ? q : null   // fallback: try as ISO3 (may fail at backend)
+    // Search all countries via name_map (covers countries outside top-N)
+    const nameMapMatch = Object.entries(result.name_map).find(
+      ([iso, name]) => name.toUpperCase().includes(q) || iso === q
+    )
+    if (nameMapMatch) return nameMapMatch[0]
+    return q.length === 3 ? q : null   // last resort: try as ISO3
   }
 
   async function handleAnalyze(e: React.FormEvent) {
@@ -439,17 +447,31 @@ export default function App() {
       // First call: get rankings + importance scores (no country focus yet)
       const { data } = await axios.post<AnalyzeResponse>('/analyze', { ...aBase(), prompt: aPrompt })
 
-      // If user specified a focus country, resolve it then fetch pro/con in a second call
-      if (aFocusRaw.trim()) {
-        const iso3 = resolveIso3(aFocusRaw, data)
+      // Apply LLM-extracted sector/country if user hasn't manually set them
+      const effectiveSector = data.extracted_sector ?? aSector
+      const effectiveCountryRaw = aFocusRaw.trim() || data.extracted_country || ''
+      if (data.extracted_sector && data.extracted_sector !== aSector) setASector(data.extracted_sector)
+      if (data.extracted_country && !aFocusRaw.trim()) setAFocusRaw(data.extracted_country)
+
+      // If country extracted/specified, fetch pro/con with correct sector
+      if (effectiveCountryRaw) {
+        const iso3 = resolveIso3(effectiveCountryRaw, data)
         if (iso3) {
           setACountry(iso3)
           const { data: data2 } = await axios.post<AnalyzeResponse>('/analyze', {
-            ...aBase(iso3), prompt: '', force_scores: data.importance_scores,
+            ...aBase(iso3), sector: effectiveSector, prompt: '', force_scores: data.importance_scores,
           })
           setAResult(data2)
           return
         }
+      }
+      // If only sector was extracted, re-run with the correct sector
+      if (data.extracted_sector && data.extracted_sector !== aSector) {
+        const { data: data2 } = await axios.post<AnalyzeResponse>('/analyze', {
+          ...aBase(), sector: effectiveSector, prompt: '', force_scores: data.importance_scores,
+        })
+        setAResult(data2)
+        return
       }
       setAResult(data)
     } catch (err: unknown) {
@@ -1110,7 +1132,7 @@ export default function App() {
                 background: 'radial-gradient(ellipse 80% 100% at 50% 0%, rgba(13,148,136,0.10) 0%, rgba(13,148,136,0.04) 35%, transparent 75%)',
               }}>
               <div className="glass rounded-[28px] p-8 flex flex-col gap-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--color-fg-muted)]">Describe your mandate</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--color-fg-muted)]">What are your priorities?</p>
                 <form onSubmit={handleAnalyze} className="flex gap-3 items-start">
                   <textarea
                     className="flex-1 bg-white/60 border border-[color:var(--color-border)] rounded-[12px] px-4 py-3 text-[color:var(--color-fg)] placeholder:text-[color:var(--color-fg-subtle)] focus:outline-none focus:border-[color:var(--color-accent)] resize-none text-sm leading-relaxed"
@@ -1303,14 +1325,15 @@ export default function App() {
                     r.country_iso3.toUpperCase().includes(q) ||
                     r.country_name.toUpperCase().includes(q))
                   if (inTop) return null
-                  const match = Object.entries(aResult.full_rank_map).find(
-                    ([iso]) => iso.toUpperCase().includes(q)
+                  const match = Object.entries(aResult.name_map).find(
+                    ([iso, name]) => iso.toUpperCase().includes(q) || name.toUpperCase().includes(q)
                   )
                   if (!match) return (
                     <div className="text-xs text-[color:var(--color-fg-subtle)] px-1">No country found matching "{aSearch}".</div>
                   )
-                  const [iso, rank] = match
-                  const name = aResult.ranked.find(r => r.country_iso3 === iso)?.country_name ?? iso
+                  const [iso] = match
+                  const rank = aResult.full_rank_map[iso]
+                  const name = aResult.name_map[iso] ?? iso
                   return (
                     <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[20px] px-4 py-3 text-sm flex items-center justify-between">
                       <span className="text-[color:var(--color-fg)]">

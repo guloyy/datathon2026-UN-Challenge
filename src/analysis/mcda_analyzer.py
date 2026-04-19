@@ -107,6 +107,15 @@ _DIM_LIST = "\n".join(
     f'  "{k}" ({v["group"]}): {v["desc"]}' for k, v in DIMENSIONS.items()
 )
 
+_SECTOR_LIST = """  ALL  = All Sectors
+  WSH  = WASH (Water, Sanitation & Hygiene)
+  FSC  = Food Security
+  HEA  = Health
+  NUT  = Nutrition
+  PRO  = Protection
+  SHL  = Shelter
+  EDU  = Education"""
+
 _SCORE_SYSTEM_BASE = f"""You are an expert humanitarian prioritization assistant.
 
 Score the importance of each dimension from 1 to 10.
@@ -121,16 +130,22 @@ weight of a 1. Only give high scores to dimensions the user actually cares about
 Dimensions:
 {_DIM_LIST}
 
-Rules:
-- Return ONLY a valid JSON object mapping each key to an integer 1–10
-- No explanation, no markdown fences
-- All 14 keys must be present
+Also extract context from the user's text:
+- "country_iso3": ISO3 code if a specific country is mentioned (e.g. "Sudan" → "SDN"), else null
+- "sector": one of the sector codes below if a specific sector is mentioned, else null
+{_SECTOR_LIST}
 
-Example — user says "severity mismatch and chronic neglect":
+Rules:
+- Return ONLY a valid JSON object
+- No explanation, no markdown fences
+- All 14 dimension keys must be present as integers 1–10
+- Include "country_iso3" and "sector" keys (string or null)
+
+Example — user says "food security in Sudan with chronic neglect":
 {{"need_scale":2,"funding_gap":3,"structural_neglect":9,"trend_worsening":2,\
-"targeting_gap":1,"water_stress":2,"food_insecurity_risk":2,"displacement_risk":1,\
+"targeting_gap":1,"water_stress":2,"food_insecurity_risk":8,"displacement_risk":1,\
 "health_fragility":1,"climate_vulnerability":2,"governance_fragility":3,"disaster_risk":1,\
-"inform_severity":8,"mismatch_score":10}}
+"inform_severity":5,"mismatch_score":6,"country_iso3":"SDN","sector":"FSC"}}
 """
 
 SCORE_SYSTEM_INITIAL = _SCORE_SYSTEM_BASE
@@ -192,10 +207,12 @@ def weights_from_scores(scores: dict[str, int]) -> dict[str, float]:
 
 # ── Weight extraction ─────────────────────────────────────────────────────────
 
+_VALID_SECTORS = {"ALL", "WSH", "FSC", "HEA", "NUT", "PRO", "SHL", "EDU"}
+
 def extract_weights(
     prompt: str,
     previous_scores: dict[str, int] | None = None,
-) -> tuple[dict[str, float], dict[str, int], str]:
+) -> tuple[dict[str, float], dict[str, int], str, str | None, str | None]:
     """
     NL → importance scores (1–10) → normalised weight vector.
 
@@ -250,7 +267,14 @@ def extract_weights(
         + ", ".join(f"{DIMENSIONS[k]['label']} ({v}/10)" for k, v in top3)
         + (". Scores adjusted from previous." if previous_scores else ".")
     )
-    return weights, importance, interpretation
+
+    raw_country = parsed.get("country_iso3")
+    extracted_country: str | None = raw_country.strip().upper() if isinstance(raw_country, str) and raw_country.strip() else None
+
+    raw_sector = parsed.get("sector")
+    extracted_sector: str | None = raw_sector.strip().upper() if isinstance(raw_sector, str) and raw_sector.strip().upper() in _VALID_SECTORS else None
+
+    return weights, importance, interpretation, extracted_country, extracted_sector
 
 
 # ── Data loading ──────────────────────────────────────────────────────────────
@@ -454,7 +478,7 @@ def build_pro_con(
                             "country_name": str(best["country_name"]),
                             "country_iso3": str(best["country_iso3"]),
                             "value":        round(bv, 3) if math.isfinite(bv) else None,
-                            "mcda_rank":    int(best["mcda_rank"]),
+                            "mcda_rank":    int(best["mcda_rank"]) if pd.notna(best["mcda_rank"]) else None,
                         }
             cons.append(card)
         else:
@@ -472,7 +496,7 @@ def build_pro_con(
         "continent":    str(row.get("continent", "")),
         "region_name":  str(row.get("region_name", "")),
         "mcda_score":   round(float(row["mcda_score"]), 4),
-        "mcda_rank":    int(row["mcda_rank"]),
+        "mcda_rank":    int(row["mcda_rank"]) if pd.notna(row["mcda_rank"]) else None,
         "n_countries":  len(scored),
         "why_fund":     narrative["why_fund"],
         "why_not":      narrative["why_not"],
@@ -550,7 +574,7 @@ def _dimension_narrative(
     if dim == "structural_neglect":
         yu = _raw("years_underfunded")
         ny = _raw("n_years")
-        if ny is None or ny < 2:
+        if ny is None or ny < 2 or yu is None:
             return "Not enough years on record to assess chronic underfunding patterns."
         if yu is None:
             return f"Chronic underfunding is {pct_str}, but the count of underfunded years is not reported."
@@ -680,7 +704,7 @@ def _llm_summary(
     pin_m    = f"{row.get('pin', 0) / 1e6:.1f}M" if row.get("pin") else "unknown"
     cov      = f"{row.get('coverage_ratio', 0) * 100:.0f}%" if row.get("coverage_ratio") is not None else "unknown"
     req      = f"${row.get('requirements_usd', 0) / 1e6:.0f}M" if row.get("requirements_usd") else "unknown"
-    rank     = int(row['mcda_rank'])
+    rank     = int(row['mcda_rank']) if pd.notna(row.get('mcda_rank')) else 0
     n        = row.get('n_countries', '?')
 
     user_msg = f"""User mandate: {user_prompt or 'balanced across all dimensions'}

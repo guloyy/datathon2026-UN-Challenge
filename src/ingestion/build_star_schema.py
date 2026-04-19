@@ -275,7 +275,7 @@ def build_star(save: bool = True) -> dict[str, pd.DataFrame]:
     if not master_path.exists():
         raise FileNotFoundError(
             f"{master_path} not found.\n"
-            "Run: python -c \"from src.ingestion.build_dataset import build; build()\""
+            "Run: python scripts/upload_to_databricks.py"
         )
 
     print("Loading master dataset…")

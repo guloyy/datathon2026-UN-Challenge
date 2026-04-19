@@ -9,6 +9,4 @@ data/raw
 *.egg-info
 .pytest_cache
 .venv
-notebooks
-docs
 tests
