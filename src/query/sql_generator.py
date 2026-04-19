@@ -138,6 +138,8 @@ QUERY RULES
     JOIN workspace.geo_insight.dim_country c ON f.country_iso3 = c.country_iso3
     JOIN workspace.geo_insight.dim_crisis_plan p ON f.country_iso3 = p.country_iso3 AND f.year = p.year
 - Default LIMIT 50 unless user specifies otherwise
+- ALWAYS include ORDER BY before LIMIT. Choose the most meaningful sort: if the question implies severity/priority, order by coverage_ratio ASC (worst funded first) or pin DESC (most people in need first). Never use LIMIT without ORDER BY.
+- When the user asks about a problem (water, food, health, etc.) filter to that sector AND order by the most relevant metric so LIMIT returns the most severe cases, not arbitrary rows.
 """
 
 
@@ -237,7 +239,8 @@ Additional rules:
 - Return ONLY the corrected SQL query — no explanation, no markdown fences, no commentary.
 - Use Databricks SQL (Spark SQL dialect).
 - Default year filter: WHERE f.year BETWEEN {year_filter[0]} AND {year_filter[1]} — apply unless the user specifies otherwise.
-- Skip rows with no useful data: AND (f.requirements_usd IS NOT NULL OR f.pin IS NOT NULL) — always wrap this OR in parentheses to avoid operator precedence bugs."""
+- Skip rows with no useful data: AND (f.requirements_usd IS NOT NULL OR f.pin IS NOT NULL) — always wrap this OR in parentheses to avoid operator precedence bugs.
+- ALWAYS include ORDER BY before LIMIT. Never use LIMIT without ORDER BY."""
 
     user_message = f"""The following SQL query failed with an error. Please fix it.
 

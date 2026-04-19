@@ -88,6 +88,16 @@ DIMENSIONS: dict[str, dict[str, str]] = {
         "desc":   "Physical exposure to floods, droughts, earthquakes, and cyclones.",
         "group":  "Vulnerability",
     },
+    "inform_severity": {
+        "label":  "Crisis Severity (INFORM)",
+        "desc":   "INFORM Global Crisis Severity Index — composite of impact, conditions of affected people, and crisis complexity. Normalised 0–1 from 1–10 scale.",
+        "group":  "Severity",
+    },
+    "mismatch_score": {
+        "label":  "Severity-Funding Mismatch",
+        "desc":   "severity × (1 − coverage_ratio): highest where a very severe crisis receives the least funding. Identifies the top-left-quadrant 'most overlooked' crises.",
+        "group":  "Severity",
+    },
 }
 
 DEFAULT_WEIGHTS: dict[str, float] = {k: round(1 / len(DIMENSIONS), 4) for k in DIMENSIONS}
@@ -114,12 +124,13 @@ Dimensions:
 Rules:
 - Return ONLY a valid JSON object mapping each key to an integer 1–10
 - No explanation, no markdown fences
-- All 12 keys must be present
+- All 14 keys must be present
 
-Example — user says "water scarcity and chronic neglect":
+Example — user says "severity mismatch and chronic neglect":
 {{"need_scale":2,"funding_gap":3,"structural_neglect":9,"trend_worsening":2,\
-"targeting_gap":1,"water_stress":10,"food_insecurity_risk":2,"displacement_risk":1,\
-"health_fragility":1,"climate_vulnerability":2,"governance_fragility":3,"disaster_risk":1}}
+"targeting_gap":1,"water_stress":2,"food_insecurity_risk":2,"displacement_risk":1,\
+"health_fragility":1,"climate_vulnerability":2,"governance_fragility":3,"disaster_risk":1,\
+"inform_severity":8,"mismatch_score":10}}
 """
 
 SCORE_SYSTEM_INITIAL = _SCORE_SYSTEM_BASE
@@ -295,11 +306,20 @@ def score_all(
     dim_c = get_dim_country()
     vuln, vuln_iso3s = _load_vulnerability()
 
+    from src.data.inform_loader import get_inform_severity
+    inform = get_inform_severity()
+    inform_year = (
+        inform[inform["year"] == year][["country_iso3", "inform_severity"]]
+        if year in inform["year"].values
+        else inform.groupby("country_iso3")["inform_severity"].max().reset_index()
+    )
+
     base = (
         fact[(fact["sector"] == sector) & (fact["year"] == year)]
         .merge(dim_c[["country_iso3", "country_name", "continent", "region_name"]],
                on="country_iso3", how="left")
         .merge(vuln, on="country_iso3", how="left")
+        .merge(inform_year, on="country_iso3", how="left")
     )
 
     temporal = _compute_temporal(fact, sector)
@@ -312,29 +332,44 @@ def score_all(
     log_pin = np.log1p(base["pin"].clip(lower=0).fillna(0))
     base["need_scale"] = log_pin / (log_pin.max() or 1.0)
 
+    # funding_gap: no funding received = 0 is a fact → gap = 1.0 when untracked.
     base["funding_gap"] = (1 - base["coverage_ratio"].clip(0, 1)).fillna(1.0)
 
-    base["structural_neglect"] = base["mean_funding_gap"].fillna(0.5)
+    base["structural_neglect"] = base["mean_funding_gap"]            # NaN if <2 years
 
-    decline = (-base["coverage_slope"]).fillna(0).clip(lower=0)
-    base["trend_worsening"] = decline / (decline.max() or 1.0)
+    decline = (-base["coverage_slope"]).clip(lower=0)                # NaN if <2 years
+    max_decline = decline.max()
+    base["trend_worsening"] = (decline / max_decline) if (max_decline and max_decline > 0) else np.nan
 
     with np.errstate(invalid="ignore", divide="ignore"):
         tgt_gap = 1 - (base["targeted"] / base["pin"]).clip(0, 1)
-    base["targeting_gap"] = tgt_gap.fillna(0.5)
+    base["targeting_gap"] = tgt_gap                                  # NaN if no PIN/targeted
 
-    # ── External vulnerability columns (fill missing with 0.5 neutral) ────────
+    # ── External vulnerability columns — NaN if not available ────────────────
     for dim in ("water_stress", "food_insecurity_risk", "displacement_risk",
                 "health_fragility", "climate_vulnerability",
                 "governance_fragility", "disaster_risk"):
         if dim not in base.columns:
-            base[dim] = 0.5
+            base[dim] = np.nan
+
+    # ── INFORM severity & mismatch ────────────────────────────────────────────
+    # No fill — countries without INFORM data stay NaN; mismatch_score is NaN too.
+    base["mismatch_score"] = (base["inform_severity"] * base["funding_gap"]).clip(0, 1)
 
     # ── Weighted MCDA score ───────────────────────────────────────────────────
-    total_w = sum(weights.values()) or 1.0
-    base["mcda_score"] = (
-        sum(weights.get(dim, 0) * base[dim] for dim in DIMENSIONS) / total_w
-    )
+    # For each country, sum only over dimensions that have real data;
+    # normalise by the actual weight sum for that country so NaN dims don't penalise it.
+    def _row_score(row: pd.Series) -> float:
+        num = denom = 0.0
+        for dim in DIMENSIONS:
+            w = weights.get(dim, 0)
+            v = row.get(dim)
+            if w > 0 and v is not None and not pd.isna(v):
+                num   += w * float(v)
+                denom += w
+        return num / denom if denom > 0 else 0.0
+
+    base["mcda_score"] = base.apply(_row_score, axis=1)
 
     # Percentile rank per dimension (1.0 = highest need/risk)
     for dim in DIMENSIONS:
@@ -510,13 +545,16 @@ def _dimension_narrative(
     if dim == "structural_neglect":
         yu = _raw("years_underfunded")
         ny = _raw("n_years")
-        if yu is not None and ny:
-            return (
-                f"Below 30% coverage for {int(yu)} of the last {int(ny)} years on record — {'chronically neglected over time' if high else 'relatively consistent funding history' if low else 'intermittent underfunding'}."
-            )
-        return f"Historical underfunding is {pct_str}."
+        if ny is None or ny < 2:
+            return "Not enough years on record to assess chronic underfunding patterns."
+        return (
+            f"Below 30% coverage for {int(yu)} of the last {int(ny)} years on record — {'chronically neglected over time' if high else 'relatively consistent funding history' if low else 'intermittent underfunding'}."
+        )
 
     if dim == "trend_worsening":
+        ny = _raw("n_years")
+        if ny is None or ny < 2:
+            return "Not enough years on record to calculate a funding trend."
         slope = _raw("coverage_slope")
         if slope is not None:
             dir_str = "declining" if slope < 0 else "improving"
@@ -524,19 +562,22 @@ def _dimension_narrative(
             return (
                 f"Funding coverage is {dir_str} by ~{rate:.1f}pp per year — {'the gap is widening' if high else 'the situation is stabilising or recovering' if low else 'a modest trend change'}."
             )
-        return f"Funding trend is {pct_str}."
+        return "Trend data not available."
 
     if dim == "targeting_gap":
         tgt = _raw("targeted")
         pin = _raw("pin")
-        if tgt is not None and pin and pin > 0:
+        if pin is None or tgt is None:
+            return "Targeting data not reported — it is unknown what share of people in need are reached by the response."
+        if pin > 0:
             tgt_pct = min(tgt / pin, 1) * 100
             return (
                 f"Only {tgt_pct:.0f}% of people in need are targeted for any humanitarian response — {'a major gap in programme reach' if high else 'relatively comprehensive targeting' if low else 'partial programme coverage'}."
             )
-        return f"Targeting coverage is {pct_str}."
 
     if dim == "water_stress":
+        if val is None:
+            return "Water stress data not available for this country."
         return (
             "Faces extreme water stress — demand regularly exceeds renewable supply, compounding protection and food security risks." if high
             else "Water resources are relatively adequate — scarcity is not a primary structural driver here." if low
@@ -544,6 +585,8 @@ def _dimension_narrative(
         )
 
     if dim == "food_insecurity_risk":
+        if val is None:
+            return "Food insecurity risk data not available for this country."
         return (
             "High structural food insecurity risk — production shortfalls, import dependency, and market fragility leave the population exposed." if high
             else "Structural food security risk is relatively lower compared to the most vulnerable countries." if low
@@ -551,6 +594,8 @@ def _dimension_narrative(
         )
 
     if dim == "displacement_risk":
+        if val is None:
+            return "Displacement risk data not available for this country."
         return (
             "High displacement and refugee risk — large populations uprooted internally or across borders, concentrating needs and straining host systems." if high
             else "Displacement levels are relatively contained compared to other active crises." if low
@@ -558,6 +603,8 @@ def _dimension_narrative(
         )
 
     if dim == "health_fragility":
+        if val is None:
+            return "Health system fragility data not available for this country."
         return (
             "Severely fragile health system — limited infrastructure, workforce, and supply chains cannot absorb the additional burden of a humanitarian crisis." if high
             else "Health system is comparatively more resilient — better placed to manage crisis-related disease burden." if low
@@ -565,6 +612,8 @@ def _dimension_narrative(
         )
 
     if dim == "climate_vulnerability":
+        if val is None:
+            return "Climate vulnerability data not available for this country."
         return (
             "Highly exposed to climate shocks with very limited adaptive capacity — extreme weather events directly amplify humanitarian needs." if high
             else "Lower structural climate vulnerability — less exposed or better equipped to adapt to climate variability." if low
@@ -572,6 +621,8 @@ def _dimension_narrative(
         )
 
     if dim == "governance_fragility":
+        if val is None:
+            return "Governance fragility data not available for this country."
         return (
             "Weak institutions and limited state capacity create barriers to humanitarian access, coordination, and durable solutions." if high
             else "Governance capacity is comparatively stronger — state systems can partially support crisis response." if low
@@ -579,14 +630,34 @@ def _dimension_narrative(
         )
 
     if dim == "disaster_risk":
+        if val is None:
+            return "Natural disaster exposure data not available for this country."
         return (
             "High physical exposure to floods, droughts, earthquakes, or cyclones — natural hazards repeatedly trigger or deepen the crisis." if high
             else "Lower exposure to acute natural hazard risk relative to other crisis-affected countries." if low
             else "Some natural hazard exposure, but not among the highest-risk countries globally."
         )
 
+    if dim == "inform_severity":
+        sev_raw = val * 10 if val is not None else None
+        sev_str = f"{sev_raw:.1f}/10" if sev_raw is not None else "unknown"
+        return (
+            f"INFORM Severity score of {sev_str} — among the most severe active crises globally, with acute impact, dire conditions for affected people, and high crisis complexity." if high
+            else f"INFORM Severity score of {sev_str} — relatively lower crisis severity compared to the most acute emergencies." if low
+            else f"INFORM Severity score of {sev_str} — a significant but mid-range crisis on the global severity scale."
+        )
+
+    if dim == "mismatch_score":
+        return (
+            "This is a top-left-quadrant crisis: high severity combined with very low funding coverage — the exact mismatch that leaves the most severe crises most overlooked." if high
+            else "Despite some severity, this crisis receives relatively adequate funding proportional to its scale — the mismatch is lower than in other contexts." if low
+            else "Moderate severity-funding mismatch — partially funded relative to its severity, but the gap remains significant."
+        )
+
     # Fallback
-    return f"{meta['label']} is {pct_str} (score {val:.2f}, weight {weight:.0%})." if val is not None else f"{meta['label']} is {pct_str}."
+    if val is None:
+        return f"{meta['label']}: data not available for this country."
+    return f"{meta['label']} is {pct_str} (score {val:.2f}, weight {weight:.0%})."
 
 
 def _llm_summary(

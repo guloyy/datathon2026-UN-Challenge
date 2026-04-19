@@ -142,7 +142,7 @@ def run_query(req: QueryRequest):
         query=req.query,
         sql=sql,
         columns=list(df.columns),
-        rows=df.to_dict(orient="records"),
+        rows=_san(df.to_dict(orient="records")),
         row_count=len(df),
     )
 
@@ -180,9 +180,9 @@ def score(req: ScoreRequest):
 
     return ScoreResponse(
         year=req.year,
-        rows=df_out.to_dict(orient="records"),
+        rows=_san(df_out.to_dict(orient="records")),
         row_count=len(df_out),
-        meta=meta,
+        meta=_san(meta),
     )
 
 
@@ -199,9 +199,13 @@ def analyze(req: AnalyzeRequest):
         importance_scores = {k: max(1, min(10, v)) for k, v in req.force_scores.items()}
         weights = weights_from_scores(importance_scores)
         interpretation = "Scores adjusted manually."
+    elif not req.prompt.strip():
+        # No prompt — use equal weights across all dimensions
+        from src.analysis.mcda_analyzer import DEFAULT_IMPORTANCE
+        importance_scores = dict(DEFAULT_IMPORTANCE)
+        weights = weights_from_scores(importance_scores)
+        interpretation = "Default analysis: all dimensions weighted equally."
     else:
-        if not req.prompt.strip():
-            raise HTTPException(status_code=422, detail="prompt must not be empty")
         try:
             weights, importance_scores, interpretation = extract_weights(
                 req.prompt, previous_scores=req.previous_scores
@@ -231,6 +235,7 @@ def analyze(req: AnalyzeRequest):
         "need_scale", "funding_gap", "structural_neglect", "trend_worsening",
         "targeting_gap", "water_stress", "food_insecurity_risk", "displacement_risk",
         "health_fragility", "climate_vulnerability", "governance_fragility", "disaster_risk",
+        "inform_severity", "mismatch_score",
         "pin", "coverage_ratio", "requirements_usd", "years_underfunded",
     ]
     cols = [c for c in ranked_cols if c in scored.columns]

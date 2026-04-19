@@ -3,7 +3,7 @@ import axios from 'axios'
 import {
   ScatterChart, Scatter, XAxis, YAxis, ZAxis, CartesianGrid,
   Tooltip as ReTooltip, ResponsiveContainer, ReferenceLine,
-  Label,
+  Label, Cell,
 } from 'recharts'
 import { ComposableMap, Geographies, Geography } from 'react-simple-maps'
 
@@ -181,6 +181,12 @@ const DIM_META: Record<string, { label: string; group: string; desc: string; sou
   disaster_risk:       { label: 'Natural Disaster Exposure', group: 'Vulnerability',
     desc: 'Physical exposure to floods, droughts, earthquakes, and cyclones that repeatedly trigger or deepen humanitarian crises.',
     source: 'INFORM Risk Index — hazard sub-index' },
+  inform_severity:     { label: 'Crisis Severity (INFORM)', group: 'Severity',
+    desc: 'INFORM Global Crisis Severity Index: composite of impact (20%), conditions of affected people (50%), and crisis complexity (30%). Normalised 0–1 from 1–10 scale.',
+    source: 'INFORM / ACAPS Global Crisis Severity Index' },
+  mismatch_score:      { label: 'Severity-Funding Mismatch', group: 'Severity',
+    desc: 'severity × (1 − coverage ratio): peaks where a very severe crisis receives the least funding. The top-left-quadrant "most overlooked" metric.',
+    source: 'INFORM Severity × FTS coverage ratio' },
 }
 
 const SECTOR_OPTIONS: { value: string; label: string }[] = [
@@ -392,7 +398,6 @@ export default function App() {
 
   async function handleAnalyze(e: React.FormEvent) {
     e.preventDefault()
-    if (!aPrompt.trim()) return
     setALoading(true); setAError(null); setAResult(null); setARefine(''); setACompare(new Set()); setACountry('')
     try {
       // First call: get rankings + importance scores (no country focus yet)
@@ -464,7 +469,7 @@ export default function App() {
   const [query, setQuery]       = useState('')
   const [yearFrom, setYearFrom] = useState(2019)
   const [yearTo, setYearTo]     = useState(2025)
-  const [showSql, setShowSql]   = useState(false)
+  const [showSql, setShowSql]   = useState(true)
   const [qLoading, setQLoading] = useState(false)
   const [qError, setQError]     = useState<string | null>(null)
   const [qResult, setQResult]   = useState<QueryResponse | null>(null)
@@ -1037,6 +1042,7 @@ export default function App() {
             food_insecurity_risk: '#10b981', displacement_risk: '#3b82f6',
             health_fragility: '#e11d48', climate_vulnerability: '#84cc16',
             governance_fragility: '#a855f7', disaster_risk: '#14b8a6',
+            inform_severity: '#f43f5e', mismatch_score: '#dc2626',
           }
 
           const sortedRanked = aResult
@@ -1088,7 +1094,7 @@ export default function App() {
                       value={aFocusRaw}
                       onChange={e => setAFocusRaw(e.target.value)}
                     />
-                    <button type="submit" disabled={aLoading || !aPrompt.trim()}
+                    <button type="submit" disabled={aLoading}
                       className="btn-primary px-4 py-2 rounded-[12px] text-sm font-medium">
                       {aLoading ? '…' : 'Analyze →'}
                     </button>
@@ -1773,6 +1779,150 @@ export default function App() {
                     </table>
                   </div>
                 )}
+
+                {/* ── Severity vs Funding scatter ──────────────────────── */}
+                {(() => {
+                  const CONT_COLOR: Record<string, string> = {
+                    'Africa':               '#f97316',
+                    'Middle East':          '#ef4444',
+                    'Asia':                 '#3b82f6',
+                    'Latin America':        '#10b981',
+                    'Europe & Central Asia':'#a855f7',
+                  }
+                  const pts = aResult.ranked
+                    .filter(r => r.inform_severity != null && r.coverage_ratio != null)
+                    .map(r => ({
+                      x:        Math.round((r.coverage_ratio as number) * 100),
+                      y:        Math.round(((r.inform_severity as number) * 5) * 10) / 10,
+                      z:        r.pin ? Math.max(4, Math.sqrt(r.pin / 1e5) * 6) : 4,
+                      name:     r.country_name,
+                      iso3:     r.country_iso3,
+                      continent:r.continent ?? '',
+                      mismatch: r.mismatch_score,
+                      rank:     r.mcda_rank,
+                      pin:      r.pin,
+                    }))
+
+                  if (pts.length < 3) return null
+
+                  const X_SPLIT = 50   // 50% coverage divider
+                  const Y_SPLIT = 3.0  // INFORM severity 3/5 divider
+
+                  const CustomDot = (props: any) => {
+                    const { cx, cy, payload } = props
+                    const isSelected = payload.iso3 === aCountry
+                    const r = Math.sqrt(payload.z / Math.PI) * 6
+                    return (
+                      <g>
+                        {isSelected && (
+                          <circle cx={cx} cy={cy} r={r + 5}
+                            fill="none" stroke="#facc15" strokeWidth={2.5} />
+                        )}
+                        <circle cx={cx} cy={cy} r={r}
+                          fill={CONT_COLOR[payload.continent] ?? '#94a3b8'}
+                          fillOpacity={0.75}
+                          stroke={isSelected ? '#facc15' : '#fff'}
+                          strokeWidth={isSelected ? 2 : 0.8}
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => setACountry(payload.iso3)}
+                        />
+                        {r > 10 && (
+                          <text cx={cx} cy={cy} textAnchor="middle"
+                            dominantBaseline="central"
+                            fontSize={9} fill="#fff" fontWeight={600}
+                            style={{ pointerEvents: 'none' }}>
+                            {payload.iso3}
+                          </text>
+                        )}
+                      </g>
+                    )
+                  }
+
+                  const CustomTooltip = ({ active, payload }: any) => {
+                    if (!active || !payload?.length) return null
+                    const d = payload[0]?.payload
+                    if (!d) return null
+                    return (
+                      <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-xl px-3 py-2.5 text-xs shadow-lg max-w-[180px]">
+                        <p className="font-semibold text-[color:var(--color-fg)] mb-1">{d.name}</p>
+                        <p className="text-[color:var(--color-fg-subtle)]">Severity: <span className="font-mono text-[color:var(--color-fg)]">{d.y}/5</span></p>
+                        <p className="text-[color:var(--color-fg-subtle)]">Coverage: <span className="font-mono text-[color:var(--color-fg)]">{d.x}%</span></p>
+                        {d.pin != null && (
+                          <p className="text-[color:var(--color-fg-subtle)]">PIN: <span className="font-mono text-[color:var(--color-fg)]">{(d.pin/1e6).toFixed(1)}M</span></p>
+                        )}
+                        {d.mismatch != null && (
+                          <p className="text-[color:var(--color-fg-subtle)]">Mismatch: <span className="font-mono text-[color:var(--color-fg)]">{(d.mismatch*100).toFixed(0)}%</span></p>
+                        )}
+                        <p className="text-[color:var(--color-fg-subtle)] mt-1">Rank: <span className="font-mono text-[color:var(--color-fg)]">#{d.rank}</span></p>
+                      </div>
+                    )
+                  }
+
+                  return (
+                    <div className="bg-[color:var(--color-surface)] border border-[color:var(--color-border)] rounded-[20px] overflow-hidden">
+                      <div className="px-5 py-3 border-b border-[color:var(--color-border)]">
+                        <p className="text-sm font-semibold text-[color:var(--color-fg)]">Severity vs. Funding Coverage</p>
+                        <p className="text-xs text-[color:var(--color-fg-subtle)] mt-0.5">
+                          Top-left = most overlooked · bubble size = people in need · click to analyze a country
+                        </p>
+                      </div>
+                      <div className="p-4 relative">
+                        {/* Quadrant labels */}
+                        <div className="absolute inset-4 pointer-events-none" style={{ bottom: 40, top: 20 }}>
+                          <div className="absolute top-1 left-1 text-[10px] font-semibold text-red-400/70 bg-red-400/5 rounded px-1.5 py-0.5">
+                            Severe &amp; Overlooked ★
+                          </div>
+                          <div className="absolute top-1 right-1 text-[10px] font-semibold text-emerald-400/70 bg-emerald-400/5 rounded px-1.5 py-0.5">
+                            Severe &amp; Funded
+                          </div>
+                          <div className="absolute bottom-1 left-1 text-[10px] font-semibold text-[color:var(--color-fg-subtle)]/50 rounded px-1.5 py-0.5">
+                            Lower Risk &amp; Overlooked
+                          </div>
+                          <div className="absolute bottom-1 right-1 text-[10px] font-semibold text-[color:var(--color-fg-subtle)]/50 rounded px-1.5 py-0.5">
+                            Lower Risk &amp; Funded
+                          </div>
+                        </div>
+
+                        <ResponsiveContainer width="100%" height={340}>
+                          <ScatterChart margin={{ top: 20, right: 24, bottom: 32, left: 24 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" opacity={0.4} />
+                            <XAxis type="number" dataKey="x" domain={[0, 100]} tickCount={6}
+                              tick={{ fontSize: 10, fill: 'var(--color-fg-subtle)' }}
+                              tickFormatter={v => `${v}%`}>
+                              <Label value="Funding Coverage →" position="insideBottom" offset={-18}
+                                style={{ fontSize: 10, fill: 'var(--color-fg-subtle)' }} />
+                            </XAxis>
+                            <YAxis type="number" dataKey="y" domain={[0, 5]} tickCount={6}
+                              tick={{ fontSize: 10, fill: 'var(--color-fg-subtle)' }}
+                              tickFormatter={v => `${v}`}>
+                              <Label value="INFORM Severity →" angle={-90} position="insideLeft" offset={10}
+                                style={{ fontSize: 10, fill: 'var(--color-fg-subtle)' }} />
+                            </YAxis>
+                            <ZAxis dataKey="z" range={[40, 400]} />
+                            <ReTooltip content={<CustomTooltip />} />
+                            <ReferenceLine x={X_SPLIT} stroke="var(--color-border)" strokeDasharray="4 4" strokeWidth={1.5} />
+                            <ReferenceLine y={Y_SPLIT} stroke="var(--color-border)" strokeDasharray="4 4" strokeWidth={1.5} />
+                            <Scatter data={pts} shape={<CustomDot />}>
+                              {pts.map((p, i) => (
+                                <Cell key={i} fill={CONT_COLOR[p.continent] ?? '#94a3b8'} />
+                              ))}
+                            </Scatter>
+                          </ScatterChart>
+                        </ResponsiveContainer>
+
+                        {/* Legend */}
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 justify-center mt-1">
+                          {Object.entries(CONT_COLOR).map(([c, col]) => (
+                            <span key={c} className="flex items-center gap-1 text-[10px] text-[color:var(--color-fg-subtle)]">
+                              <span className="w-2 h-2 rounded-full inline-block" style={{ background: col }} />
+                              {c}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
               </>
             )}
 

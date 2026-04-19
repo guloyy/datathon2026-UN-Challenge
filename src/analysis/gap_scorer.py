@@ -148,6 +148,7 @@ def score_crises(
     )
 
     n = len(base)
+    total_years = fact["year"].nunique()
 
     # ── Resolve weights ───────────────────────────────────────────────────────
     w = dict(DEFAULT_WEIGHTS)
@@ -160,24 +161,35 @@ def score_crises(
     # ── 1. Normalised scoring dimensions (all in [0, 1]) ─────────────────────
     log_pin = np.log1p(base["pin"].clip(lower=0).fillna(0))
     pin_max = log_pin.max() or 1.0
-    base["need_scale"]  = log_pin / pin_max                          # scale
+    base["need_scale"] = log_pin / pin_max                           # scale
 
-    base["funding_gap"] = (1 - base["coverage_ratio"].clip(0, 1)).fillna(1.0)  # gap
+    # funding_gap: no funding received = 0 is a fact → gap = 1.0 when untracked.
+    base["funding_gap"] = (1 - base["coverage_ratio"].clip(0, 1)).fillna(1.0)
 
-    base["structural_score"] = base["mean_funding_gap"].fillna(0.5)  # structural
+    base["structural_score"] = base["mean_funding_gap"]              # NaN if <2 years data
 
-    decline = (-base["coverage_slope"]).fillna(0).clip(lower=0)
-    max_decline = decline.max() or 1.0
-    base["trend_score"] = decline / max_decline                      # trend
+    decline = (-base["coverage_slope"]).clip(lower=0)                # NaN if <2 years data
+    max_decline = decline.max()
+    base["trend_score"] = (decline / max_decline) if (max_decline and max_decline > 0) else np.nan
 
-    # ── 2. Weighted sum ───────────────────────────────────────────────────────
+    # ── 2. Weighted sum — skip NaN dimensions per country ────────────────────
     base["gap_component"] = base["funding_gap"] * base["need_scale"]  # kept for Borda
-    base["overlooked_raw"] = (
-        w["scale"]      * base["need_scale"]
-        + w["gap"]      * base["funding_gap"]
-        + w["structural"] * base["structural_score"]
-        + w["trend"]    * base["trend_score"]
-    ) / total_w
+
+    dim_cols = {
+        "scale": "need_scale", "gap": "funding_gap",
+        "structural": "structural_score", "trend": "trend_score",
+    }
+    def _weighted_score(row: pd.Series) -> float:
+        num = denom = 0.0
+        for key, col in dim_cols.items():
+            wt = w[key]
+            v  = row[col]
+            if wt > 0 and pd.notna(v):
+                num   += wt * float(v)
+                denom += wt
+        return num / denom if denom > 0 else 0.0
+
+    base["overlooked_raw"] = base.apply(_weighted_score, axis=1)
 
     # ── 3. Confidence weight (data quality discount) ──────────────────────────
     base["confidence_weight"] = (
@@ -201,7 +213,7 @@ def score_crises(
     # R4: targeting gap — lower targeted/pin is worse
     with np.errstate(invalid="ignore", divide="ignore"):
         tgt_gap = 1 - (base["targeted"] / base["pin"]).clip(0, 1)
-    base["r4"] = tgt_gap.fillna(0.5).rank(ascending=False, method="min")
+    base["r4"] = tgt_gap.rank(ascending=False, method="min", na_option="bottom")
 
     # Borda: higher = more overlooked
     base["borda_score"] = (
@@ -217,33 +229,43 @@ def score_crises(
     )
 
     # ── 6. PCA (visualization only) ───────────────────────────────────────────
+    def _safe_median(s: pd.Series, fallback: float = 0.0) -> float:
+        m = s.median()
+        return fallback if pd.isna(m) else float(m)
+
     pca_features = pd.DataFrame({
         "scale":             base["need_scale"].fillna(0),
-        "gap":               base["funding_gap"].fillna(base["funding_gap"].median()),
-        "targeting_gap":     tgt_gap.fillna(tgt_gap.median()),
+        "gap":               base["funding_gap"].fillna(_safe_median(base["funding_gap"])),
+        "targeting_gap":     tgt_gap.fillna(_safe_median(tgt_gap, 0.5)),
         "years_underfunded": base["years_underfunded"].fillna(0) / max(total_years, 1),
         "trend_gap":         (-base["coverage_slope"]).fillna(0).clip(lower=-1, upper=1),
-    })
+    }).fillna(0)  # final guard — PCA cannot tolerate any NaN
 
-    scaler = StandardScaler()  # z-score for PCA (better than min-max for PCA)
-    X_scaled = scaler.fit_transform(pca_features.values)
+    explained_var: dict = {}
+    loadings:      dict = {}
+    try:
+        scaler = StandardScaler()
+        X_scaled = scaler.fit_transform(pca_features.values)
 
-    n_components = min(3, n, pca_features.shape[1])
-    pca = PCA(n_components=n_components)
-    coords = pca.fit_transform(X_scaled)
+        n_components = min(3, n, pca_features.shape[1])
+        pca = PCA(n_components=n_components)
+        coords = pca.fit_transform(X_scaled)
 
-    base["pc1"] = coords[:, 0]
-    base["pc2"] = coords[:, 1] if n_components > 1 else 0.0
+        base["pc1"] = coords[:, 0]
+        base["pc2"] = coords[:, 1] if n_components > 1 else 0.0
 
-    explained_var = dict(zip(
-        [f"PC{i+1}" for i in range(n_components)],
-        pca.explained_variance_ratio_.round(4).tolist(),
-    ))
-    # Loadings: which features drive each PC
-    loadings = {
-        f"PC{i+1}": dict(zip(pca_features.columns, pca.components_[i].round(3).tolist()))
-        for i in range(n_components)
-    }
+        explained_var = dict(zip(
+            [f"PC{i+1}" for i in range(n_components)],
+            pca.explained_variance_ratio_.round(4).tolist(),
+        ))
+        loadings = {
+            f"PC{i+1}": dict(zip(pca_features.columns, pca.components_[i].round(3).tolist()))
+            for i in range(n_components)
+        }
+    except Exception as pca_err:
+        print(f"  ⚠ PCA skipped: {pca_err}")
+        base["pc1"] = 0.0
+        base["pc2"] = 0.0
 
     # ── 7. Explanation ────────────────────────────────────────────────────────
     base["explanation"] = base.apply(
@@ -295,13 +317,18 @@ def _explain(row: pd.Series, total_years: int) -> str:
     else:
         parts.append("funding coverage unknown")
 
+    n_cov = int(row.get("n_coverage_years") or 0)
     yu = int(row.get("years_underfunded") or 0)
-    if yu > 0:
+    if n_cov < 2:
+        parts.append("trend & structural data: not enough years on record")
+    elif yu > 0:
         label = "every year on record" if yu == total_years else f"{yu}/{total_years} years on record"
         parts.append(f"chronically underfunded — below 30% for {label}")
 
     slope = row.get("coverage_slope", np.nan)
-    if pd.notna(slope):
+    if n_cov < 2:
+        pass  # already noted above
+    elif pd.notna(slope):
         if slope < -0.03:
             parts.append("coverage declining year-over-year")
         elif slope > 0.03:
@@ -313,6 +340,8 @@ def _explain(row: pd.Series, total_years: int) -> str:
         pct = tgt / pin * 100
         if pct < 60:
             parts.append(f"only {pct:.0f}% of people in need targeted for response")
+    elif pd.notna(pin) and pd.isna(tgt):
+        parts.append("targeting data: not reported")
 
     conf = row.get("crisis_confidence", None)
     if conf == "medium":
